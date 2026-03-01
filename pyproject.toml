@@ -9,6 +9,7 @@ readme = "README.md"
 requires-python = ">=3.12,<4.0.0"
 dependencies = [
     "django (>=5.2.8,<6.0.0)",
+    "psycopg2-binary (>=2.9.0,<3.0.0)",
     "google-genai (>=1.52.0,<2.0.0)",
     "qdrant-client (>=1.16.0,<2.0.0)",
     "bandit (>=1.9.1,<2.0.0)",
@@ -21,6 +22,7 @@ dependencies = [
     "rich (>=14.2.0,<15.0.0)",
     "requests (>=2.32.3,<3.0.0)",
     "cryptography (>=44.0.0,<45.0.0)"
+    "redis (>=5.0.0,<6.0.0)"
 ]
 
 
