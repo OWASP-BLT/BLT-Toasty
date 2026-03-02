@@ -15,10 +15,10 @@ from aibot.clients import q_client
 from aibot.constants import MAX_FILE_SIZE
 from aibot.gemini_api import generate_embedding
 from aibot.github_api import GitHubClient
-from aibot.models import PullRequest
+from aibot.pr_model import PullRequest
 from aibot.types import ChunkType, EmbeddingTaskType
 from aibot.utils import generate_chunk_uuid, sanitize_name, should_skip_file
-from models import GithubAppInstallation, RepoState
+from aibot.models import GithubAppInstallation, RepoState
 
 logger = logging.getLogger(__name__)
 

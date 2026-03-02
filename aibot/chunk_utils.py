@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import List, Set, Tuple
 
 import yaml
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from aibot.types import ChunkType
 from aibot.utils import approximate_token_count_char

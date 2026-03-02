@@ -9,7 +9,8 @@ from django.utils import timezone
 from .gemini_api import generate_embedding, generate_gemini_response
 from .gh_token_manager import get_token_manager
 from .github_api import GitHubClient
-from .models import AibotComment, GithubAppInstallation, GithubAppRepo, PullRequest, RepoState
+from .models import AibotComment, GithubAppInstallation, GithubAppRepo, RepoState
+from .pr_model import PullRequest
 from .prompt_templates import (
     CONVERSATION_QUERY_GENERATOR,
     GUARDRAIL,
