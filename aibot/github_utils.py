@@ -25,7 +25,7 @@ class GitHubAppAuth:
         self.app_id = str(settings.GITHUB_APP_ID)
         self.private_key = self._load_private_key()
         self.installation_id = settings.GITHUB_APP_INSTALLATION_ID
-        
+
         # Cache for installation access token
         self._cached_token = None
         self._token_expiry = 0
@@ -57,14 +57,14 @@ class GitHubAppAuth:
 
     def get_installation_access_token(self):
         """Get an installation access token for making API requests.
-        
+
         Caches the token and reuses it until it's near expiration.
         """
         # Return cached token if it's still valid (with 5 minute buffer)
         now = int(time.time())
         if self._cached_token and self._token_expiry > now + 300:
             return self._cached_token
-            
+
         jwt_token = self.generate_jwt()
 
         headers = {
@@ -78,12 +78,12 @@ class GitHubAppAuth:
             response = requests.post(url, headers=headers, timeout=10)
             response.raise_for_status()
             token_data = response.json()
-            
+
             # Cache the token and its expiry
             self._cached_token = token_data["token"]
             # GitHub tokens expire in 1 hour by default
             self._token_expiry = now + 3600
-            
+
             return self._cached_token
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
