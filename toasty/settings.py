@@ -1,4 +1,5 @@
 import os
+import sys
 import warnings
 
 from pathlib import Path
@@ -6,10 +7,15 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    SECRET_KEY = "django-insecure-test-key-for-development-only"
-    warnings.warn("SECRET_KEY not set in environment. Using default (insecure for production).", UserWarning)
+    if DEBUG:
+        SECRET_KEY = "django-insecure-test-key-for-development-only"
+        warnings.warn("SECRET_KEY not set in environment. Using default (insecure for production).", UserWarning)
+    else:
+        raise ValueError("SECRET_KEY environment variable must be set in production")
 
 # GitHub App Configuration
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
@@ -17,8 +23,6 @@ GITHUB_APP_PRIVATE_KEY_PATH = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")
 GITHUB_APP_PRIVATE_KEY = os.getenv("GITHUB_APP_PRIVATE_KEY")
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
 GITHUB_APP_INSTALLATION_ID = os.getenv("GITHUB_APP_INSTALLATION_ID")
-
-DEBUG = True
 
 ALLOWED_HOSTS = []
 
@@ -45,8 +49,12 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# Allowed hosts for webhook (update for production)
-CSRF_TRUSTED_ORIGINS = []
+# CSRF trusted origins for cross-origin requests (configure via environment)
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 ROOT_URLCONF = "toasty.urls"
 
@@ -71,16 +79,25 @@ WSGI_APPLICATION = "toasty.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB"),
-        "USER": os.getenv("POSTGRES_USER"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
-        "HOST": "db",  # matches the docker service name
-        "PORT": "5432",
+# Use SQLite for testing, PostgreSQL otherwise
+if "test" in sys.argv:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB"),
+            "USER": os.getenv("POSTGRES_USER"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
+            "HOST": "db",  # matches the docker service name
+            "PORT": "5432",
+        }
+    }
 
 CELERY_BROKER_URL = "redis://redis:6379/0"
 CELERY_RESULT_BACKEND = "redis://redis:6379/0"

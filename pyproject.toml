@@ -21,7 +21,7 @@ dependencies = [
     "celery[redis] (>=5.5.3,<6.0.0)",
     "rich (>=14.2.0,<15.0.0)",
     "requests (>=2.32.3,<3.0.0)",
-    "cryptography (>=44.0.0,<45.0.0)"
+    "cryptography (>=44.0.0,<45.0.0)",
     "redis (>=5.0.0,<6.0.0)"
 ]
 

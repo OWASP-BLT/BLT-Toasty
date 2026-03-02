@@ -7,7 +7,6 @@ import hmac
 import json
 from unittest.mock import Mock, patch
 
-from django.conf import settings
 from django.test import TestCase, override_settings
 
 
@@ -16,7 +15,7 @@ class WebhookViewTests(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.webhook_url = "/aibot/webhook/"
+        self.webhook_url = "/webhook/"
         self.webhook_secret = "test_webhook_secret"
 
     def _create_signature(self, payload):

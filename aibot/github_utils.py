@@ -25,6 +25,10 @@ class GitHubAppAuth:
         self.app_id = str(settings.GITHUB_APP_ID)
         self.private_key = self._load_private_key()
         self.installation_id = settings.GITHUB_APP_INSTALLATION_ID
+        
+        # Cache for installation access token
+        self._cached_token = None
+        self._token_expiry = 0
 
     def _load_private_key(self):
         """Load the private key from file or environment variable."""
@@ -52,7 +56,15 @@ class GitHubAppAuth:
         return jwt.encode(payload, self.private_key, algorithm="RS256")
 
     def get_installation_access_token(self):
-        """Get an installation access token for making API requests."""
+        """Get an installation access token for making API requests.
+        
+        Caches the token and reuses it until it's near expiration.
+        """
+        # Return cached token if it's still valid (with 5 minute buffer)
+        now = int(time.time())
+        if self._cached_token and self._token_expiry > now + 300:
+            return self._cached_token
+            
         jwt_token = self.generate_jwt()
 
         headers = {
@@ -65,7 +77,14 @@ class GitHubAppAuth:
         try:
             response = requests.post(url, headers=headers, timeout=10)
             response.raise_for_status()
-            return response.json()["token"]
+            token_data = response.json()
+            
+            # Cache the token and its expiry
+            self._cached_token = token_data["token"]
+            # GitHub tokens expire in 1 hour by default
+            self._token_expiry = now + 3600
+            
+            return self._cached_token
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise ValueError("GitHub App authentication failed. Check your App ID and private key.") from e
@@ -73,13 +92,17 @@ class GitHubAppAuth:
                 raise ValueError("GitHub App installation not found. Check your installation ID.") from e
             else:
                 raise ValueError(f"GitHub API error: {e.response.status_code}") from e
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Network error communicating with GitHub API: {e}") from e
+        except (KeyError, ValueError) as e:
+            raise ValueError(f"Invalid response from GitHub API: {e}") from e
 
     def create_comment(self, owner, repo, issue_number, body):
         """Create a comment on an issue or pull request."""
         token = self.get_installation_access_token()
 
         headers = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"token {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
@@ -98,6 +121,8 @@ class GitHubAppAuth:
                 raise ValueError(f"Repository or issue not found: {owner}/{repo}#{issue_number}") from e
             else:
                 raise ValueError(f"GitHub API error: {e.response.status_code}") from e
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Network error communicating with GitHub API: {e}") from e
 
 
 def verify_webhook_signature(request):
@@ -108,15 +133,19 @@ def verify_webhook_signature(request):
         request: Django HttpRequest object
 
     Returns:
-        bool: True if signature is valid, False otherwise
+        tuple: (bool, str) - (is_valid, error_message)
+            - (True, "") if signature is valid
+            - (False, "missing_signature") if signature header is missing
+            - (False, "missing_secret") if webhook secret is not configured
+            - (False, "invalid_signature") if signature doesn't match
     """
     signature_header = request.headers.get("X-Hub-Signature-256")
     if not signature_header:
-        return False
+        return False, "missing_signature"
 
     webhook_secret = settings.GITHUB_WEBHOOK_SECRET
     if not webhook_secret:
-        return False
+        return False, "missing_secret"
 
     # Calculate expected signature
     expected_signature = "sha256=" + hmac.new(
@@ -124,4 +153,7 @@ def verify_webhook_signature(request):
     ).hexdigest()
 
     # Use constant-time comparison to prevent timing attacks
-    return hmac.compare_digest(signature_header, expected_signature)
+    if hmac.compare_digest(signature_header, expected_signature):
+        return True, ""
+    else:
+        return False, "invalid_signature"

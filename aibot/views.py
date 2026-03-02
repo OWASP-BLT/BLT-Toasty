@@ -21,9 +21,17 @@ def webhook(request):
     Handle incoming webhook events from GitHub.
     """
     # Verify webhook signature
-    if not verify_webhook_signature(request):
-        logger.warning("Invalid webhook signature")
-        return JsonResponse({"error": "Invalid signature"}, status=401)
+    is_valid, error_reason = verify_webhook_signature(request)
+    if not is_valid:
+        if error_reason == "missing_secret":
+            logger.error("GITHUB_WEBHOOK_SECRET is not configured. Unable to verify webhook signatures.")
+            return JsonResponse({"error": "Server configuration error"}, status=500)
+        elif error_reason == "missing_signature":
+            logger.warning("Webhook request missing X-Hub-Signature-256 header")
+            return JsonResponse({"error": "Missing signature"}, status=401)
+        else:
+            logger.warning("Invalid webhook signature")
+            return JsonResponse({"error": "Invalid signature"}, status=401)
 
     # Parse the payload
     try:
@@ -78,8 +86,8 @@ def handle_issue_comment(payload):
                 body="🏓 Pong! The GitHub App is working correctly.",
             )
             return JsonResponse({"message": "Pong sent!"})
-        except Exception as e:
-            logger.error(f"Error sending pong: {e}")
+        except Exception:
+            logger.exception("Error sending pong")
             return JsonResponse({"error": "Failed to send response. Check server logs for details."}, status=500)
 
     return JsonResponse({"message": "No command recognized"})
