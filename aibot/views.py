@@ -18,6 +18,13 @@ def review(request):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
+    # Service-level authentication via shared bearer token
+    expected_token = getattr(settings, "WORKER_SECRET", None)
+    if expected_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header != f"Bearer {expected_token}":
+            return JsonResponse({"error": "Unauthorized"}, status=401)
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -60,6 +67,17 @@ def review(request):
             review_data = json.loads(clean)
         except json.JSONDecodeError:
             review_data = {"summary": review_text}
+
+        # Persist review result
+        try:
+            from .models import CodeReview
+            CodeReview.objects.create(
+                language=language,
+                code_snippet=code,
+                review_result=review_data
+            )
+        except Exception:
+            pass  # Do not fail the response if persistence fails
 
         return JsonResponse({"status": "success", "analysis": review_data})
 

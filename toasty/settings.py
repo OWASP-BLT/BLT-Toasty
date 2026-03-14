@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+WORKER_SECRET = os.getenv("WORKER_SECRET")
 
 DEBUG = True
 

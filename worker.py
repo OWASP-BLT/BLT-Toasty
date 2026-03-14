@@ -5,7 +5,7 @@ This worker handles API requests for the Toasty AI code review service.
 It provides endpoints for code analysis, health checks, and status monitoring.
 """
 
-from js import Response, Headers
+from js import Response, Headers, fetch as js_fetch
 import json
 
 # Maximum request body size in bytes (1MB)
@@ -207,11 +207,14 @@ async def handle_review(request, env):
         if not backend_url:
             return create_error_response("Backend URL not configured", 500)
 
+        worker_secret = getattr(env, "WORKER_SECRET", None)
         headers = Headers.new()
         headers.set("Content-Type", "application/json")
+        if worker_secret:
+            headers.set("Authorization", f"Bearer {worker_secret}")
 
         backend_response = await js_fetch(
-            backend_url + "/aibot/review/",
+            backend_url + "/review/",
             method="POST",
             body=body,
             headers=headers
