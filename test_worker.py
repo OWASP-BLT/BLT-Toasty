@@ -216,6 +216,37 @@ def test_webhook_event_filtering():
     print("OK: Webhook event filtering tests passed")
 
 
+def test_plan_command_exact_match():
+    """Test /plan is matched exactly, not as a prefix."""
+    def is_plan_command(comment_body):
+        return comment_body == "/plan" or comment_body.startswith("/plan ")
+
+    # Valid
+    assert is_plan_command("/plan") is True
+    assert is_plan_command("/plan please implement this") is True
+
+    # Invalid - prefix match only
+    assert is_plan_command("/planning") is False
+    assert is_plan_command("/planx") is False
+    assert is_plan_command("/plans") is False
+
+    print("OK: /plan exact command match tests passed")
+
+
+def test_webhook_byte_size_check():
+    """Test that size check uses byte length not character count."""
+    # ASCII: same length
+    ascii_str = "a" * 10
+    assert len(ascii_str.encode("utf-8")) == 10
+
+    # Multibyte UTF-8: byte length > char length
+    multibyte_str = "\u00e9" * 10  # é = 2 bytes each
+    assert len(multibyte_str.encode("utf-8")) == 20
+    assert len(multibyte_str) == 10
+
+    print("OK: Byte-based size check tests passed")
+
+
 def run_all_tests():
     """Run all test functions."""
     print("Running Toasty Worker Tests...\n")
@@ -228,6 +259,8 @@ def run_all_tests():
         test_verify_github_signature()
         test_webhook_plan_command_parsing()
         test_webhook_event_filtering()
+        test_plan_command_exact_match()
+        test_webhook_byte_size_check()
 
         print("\n" + "="*50)
         print("All tests passed! ✓")

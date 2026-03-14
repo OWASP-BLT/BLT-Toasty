@@ -54,11 +54,11 @@ Respond with a numbered markdown list of implementation steps."""
         return f"⚠️ Failed to generate plan: {str(e)}"
 
 
-async def post_github_comment(repo_full_name: str, issue_number: int, body: str, env) -> None:
-    """Post a comment on a GitHub issue."""
+async def post_github_comment(repo_full_name: str, issue_number: int, body: str, env) -> bool:
+    """Post a comment on a GitHub issue. Returns True on success, False on failure."""
     token = getattr(env, "GITHUB_TOKEN", None)
     if not token or not repo_full_name or not issue_number:
-        return
+        return False
     url = f"https://api.github.com/repos/{repo_full_name}/issues/{issue_number}/comments"
     payload = json.dumps({"body": body})
     headers = Headers.new()
@@ -67,13 +67,21 @@ async def post_github_comment(repo_full_name: str, issue_number: int, body: str,
     headers.set("Accept", "application/vnd.github+json")
     headers.set("X-GitHub-Api-Version", "2022-11-28")
     headers.set("User-Agent", "BLT-Toasty/1.0")
-    await js_fetch(url, method="POST", headers=headers, body=payload)
+    response = await js_fetch(url, method="POST", headers=headers, body=payload)
+    return response.status == 201
 
 
 async def handle_webhook(request, env):
     """Handle incoming GitHub webhook events."""
+    content_length = request.headers.get("Content-Length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_BODY_SIZE:
+                return create_error_response("Payload too large", 413)
+        except ValueError:
+            pass
     body = await request.text()
-    if len(body) > MAX_BODY_SIZE:
+    if len(body.encode("utf-8")) > MAX_BODY_SIZE:
         return create_error_response("Payload too large", 413)
 
     sig = request.headers.get("X-Hub-Signature-256", "")
@@ -94,7 +102,7 @@ async def handle_webhook(request, env):
         return create_json_response({"status": "ignored", "action": payload.get("action")}, 200)
 
     comment_body = payload.get("comment", {}).get("body", "").strip()
-    if not comment_body.startswith("/plan"):
+    if comment_body != "/plan" and not comment_body.startswith("/plan "):
         return create_json_response({"status": "ignored", "reason": "not a /plan command"}, 200)
 
     issue = payload.get("issue", {})
@@ -105,7 +113,10 @@ async def handle_webhook(request, env):
     issue_body = issue.get("body", "")
 
     plan = await generate_plan(issue_title, issue_body, env)
-    await post_github_comment(repo_full_name, issue_number, plan, env)
+    posted = await post_github_comment(repo_full_name, issue_number, plan, env)
+
+    if not posted:
+        return create_error_response("Failed to post plan comment to GitHub", 502)
 
     return create_json_response({"status": "ok", "command": "/plan"}, 200)
 
