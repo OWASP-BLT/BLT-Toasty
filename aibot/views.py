@@ -4,6 +4,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from google import genai
+from .models import CodeReview
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ def index(request):
 @csrf_exempt
 def review(request):
     """
-    POST /aibot/review/
+    POST /review/
     Accepts code, language, and optional context.
     Calls Gemini API and returns structured review feedback.
     """
@@ -36,9 +37,22 @@ def review(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    code = data.get("code", "").strip()
-    language = data.get("language", "unknown")[:50]  # enforce DB max_length
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Request body must be a JSON object"}, status=400)
+
+    code = data.get("code", "")
+    if not isinstance(code, str):
+        return JsonResponse({"error": "Field 'code' must be a string"}, status=400)
+    code = code.strip()
+
+    language = data.get("language", "unknown")
+    if not isinstance(language, str):
+        language = "unknown"
+    language = language[:50]  # enforce DB max_length
+
     context = data.get("context", "")
+    if not isinstance(context, str):
+        context = ""
 
     if not code:
         return JsonResponse({"error": "Field 'code' is required"}, status=400)
@@ -75,7 +89,6 @@ def review(request):
 
         # Persist review result
         try:
-            from .models import CodeReview
             CodeReview.objects.create(
                 language=language,
                 code_snippet=code,

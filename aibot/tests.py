@@ -28,21 +28,23 @@ class ReviewEndpointTests(TestCase):
 
     def test_wrong_token_returns_401(self):
         """Wrong bearer token returns 401."""
-        resp = self.client.post(
-            self.url,
-            data=json.dumps(self.valid_body),
-            content_type="application/json",
-            HTTP_AUTHORIZATION="Bearer wrongtoken"
-        )
+        with self.settings(WORKER_SECRET="test-secret"):
+            resp = self.client.post(
+                self.url,
+                data=json.dumps(self.valid_body),
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer wrongtoken"
+            )
         self.assertEqual(resp.status_code, 401)
 
     def test_missing_auth_header_returns_401(self):
         """Missing Authorization header returns 401."""
-        resp = self.client.post(
-            self.url,
-            data=json.dumps(self.valid_body),
-            content_type="application/json"
-        )
+        with self.settings(WORKER_SECRET="test-secret"):
+            resp = self.client.post(
+                self.url,
+                data=json.dumps(self.valid_body),
+                content_type="application/json"
+            )
         self.assertEqual(resp.status_code, 401)
 
     # --- Input validation tests ---
