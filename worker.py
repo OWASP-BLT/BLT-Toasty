@@ -159,14 +159,14 @@ def handle_health(request):
 
 async def handle_review(request, env):
     """
-    Handle code review requests.
-    
+    Handle code review requests by forwarding to Django backend.
+
     Args:
         request: The incoming HTTP request
         env: Environment variables and bindings
-        
+
     Returns:
-        Response: Code review results
+        Response: Code review results from Django backend
     """
     try:
         # Check Content-Length header if present
@@ -180,68 +180,52 @@ async def handle_review(request, env):
                         413
                     )
             except ValueError:
-                pass  # Invalid Content-Length, will be caught during reading
-        
-        # Parse request body with size limit
+                pass
+
         body = await request.text()
-        
-        if len(body) > MAX_BODY_SIZE:
+
+        if len(body.encode("utf-8")) > MAX_BODY_SIZE:
             return create_error_response(
                 f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes",
                 413
             )
-        
+
         if not body:
             return create_error_response("Request body is required", 400)
-        
+
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
             return create_error_response("Invalid JSON in request body", 400)
-        
-        # Validate required fields
-        if 'code' not in data:
-            return create_error_response("Missing required field: 'code'", 400)
-        
-        code = data.get('code')
-        
-        # Validate that code is a non-empty string
-        if not isinstance(code, str):
-            return create_error_response("Field 'code' must be a string", 400)
-        
-        if not code or not code.strip():
-            return create_error_response("Field 'code' cannot be empty", 400)
-        
-        language = data.get('language', 'unknown')
-        context = data.get('context', '')
-        
-        # Placeholder for actual AI review logic
-        # In production, this would call AI services, perform static analysis, etc.
-        review_result = {
-            "status": "success",
-            "analysis": {
-                "language": language,
-                "lines_of_code": len(code.split('\n')),
-                "issues": [],
-                "suggestions": [
-                    {
-                        "type": "info",
-                        "message": "Code review placeholder - integration with AI services pending",
-                        "line": 0
-                    }
-                ],
-                "summary": "Review completed successfully"
-            },
-            "metadata": {
-                "processed_at": None,  # Would use datetime in production
-                "worker_version": "1.0.0"
-            }
-        }
-        
-        return create_json_response(review_result, 200)
-        
+
+        code = data.get("code")
+        if not isinstance(code, str) or not code.strip():
+            return create_error_response("Missing or empty field: 'code'", 400)
+
+        # Forward to Django backend
+        backend_url = getattr(env, "BACKEND_URL", None)
+        if not backend_url:
+            return create_error_response("Backend URL not configured", 500)
+
+        headers = Headers.new()
+        headers.set("Content-Type", "application/json")
+
+        backend_response = await js_fetch(
+            backend_url + "/aibot/review/",
+            method="POST",
+            body=body,
+            headers=headers
+        )
+        result_text = await backend_response.text()
+        try:
+            result = json.loads(result_text)
+        except json.JSONDecodeError:
+            result = {"error": "Invalid response from backend"}
+
+        return create_json_response(result, backend_response.status)
+
     except Exception as e:
-        return create_error_response(f"Error processing review request: {str(e)}", 500)
+        return create_error_response("Error processing review request", 500)
 
 
 def handle_status(request):
