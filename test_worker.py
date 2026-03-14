@@ -155,6 +155,157 @@ def test_review_request_validation():
     print("✓ Review request validation tests passed")
 
 
+
+def verify_github_signature(payload_body, secret, signature_header):
+    """Copy of verify_github_signature from worker.py for testing."""
+    import hmac
+    import hashlib
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected = "sha256=" + hmac.new(
+        secret.encode("utf-8"),
+        payload_body.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+def test_verify_github_signature():
+    """Test HMAC signature validation."""
+    import hmac
+    import hashlib
+    secret = "test-secret"
+    payload = '{"action": "created"}'
+    valid_sig = "sha256=" + hmac.new(
+        secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    assert verify_github_signature(payload, secret, valid_sig) is True
+    assert verify_github_signature(payload, secret, "sha256=invalidsig") is False
+    assert verify_github_signature(payload, secret, "") is False
+    assert verify_github_signature(payload, secret, "sha1=abc") is False
+    print("OK: GitHub signature validation tests passed")
+
+
+def test_webhook_plan_command_parsing():
+    """Test /plan command detection logic."""
+    def is_plan_command(comment_body):
+        stripped = comment_body.strip()
+        return stripped == "/plan" or stripped.startswith("/plan ")
+
+    # Valid commands
+    assert is_plan_command("/plan") is True
+    assert is_plan_command("/plan please") is True
+    assert is_plan_command("  /plan  ") is True
+    assert is_plan_command("  /plan please  ") is True
+
+    # Invalid - must not match prefix only
+    assert is_plan_command("/planning") is False
+    assert is_plan_command("/planx") is False
+    assert is_plan_command("/review") is False
+    assert is_plan_command("hello /plan") is False
+    assert is_plan_command("") is False
+    print("OK: /plan command parsing tests passed")
+
+
+def test_webhook_event_filtering():
+    """Test that only issue_comment events with action=created are processed."""
+    def should_process(event, action, comment_body):
+        if event != "issue_comment":
+            return False
+        if action != "created":
+            return False
+        stripped = comment_body.strip()
+        if stripped != "/plan" and not stripped.startswith("/plan "):
+            return False
+        return True
+
+    assert should_process("issue_comment", "created", "/plan") is True
+    assert should_process("issue_comment", "created", "/plan please") is True
+    assert should_process("pull_request", "created", "/plan") is False
+    assert should_process("issue_comment", "edited", "/plan") is False
+    assert should_process("issue_comment", "created", "just a comment") is False
+    assert should_process("issue_comment", "created", "/planning") is False
+    assert should_process("issue_comment", "created", "/planx") is False
+    print("OK: Webhook event filtering tests passed")
+
+
+def test_plan_command_exact_match():
+    """Test /plan is matched exactly, not as a prefix."""
+    def is_plan_command(comment_body):
+        stripped = comment_body.strip()
+        return stripped == "/plan" or stripped.startswith("/plan ")
+
+    # Valid
+    assert is_plan_command("/plan") is True
+    assert is_plan_command("/plan please implement this") is True
+
+    # Invalid - prefix match only
+    assert is_plan_command("/planning") is False
+    assert is_plan_command("/planx") is False
+    assert is_plan_command("/plans") is False
+
+    print("OK: /plan exact command match tests passed")
+
+
+def test_webhook_byte_size_check():
+    """Test that size check uses byte length not character count."""
+    MAX_BODY_SIZE = 1024 * 1024
+
+    def is_too_large(body):
+        """Mirror the exact predicate used in worker.py."""
+        return len(body.encode("utf-8")) > MAX_BODY_SIZE
+
+    # ASCII just under limit — must pass
+    ascii_ok = "a" * MAX_BODY_SIZE
+    assert not is_too_large(ascii_ok)
+
+    # ASCII over limit — must fail
+    ascii_over = "a" * (MAX_BODY_SIZE + 1)
+    assert is_too_large(ascii_over)
+
+    # Multibyte: half the char count but still over limit in bytes
+    # é = 2 bytes, so MAX_BODY_SIZE/2 + 1 chars exceeds the byte limit
+    multibyte_over = "\u00e9" * (MAX_BODY_SIZE // 2 + 1)
+    assert len(multibyte_over) < MAX_BODY_SIZE  # char count under limit
+    assert is_too_large(multibyte_over)          # byte count over limit
+
+    # Multibyte just under limit in bytes
+    multibyte_ok = "\u00e9" * (MAX_BODY_SIZE // 2 - 1)
+    assert not is_too_large(multibyte_ok)
+
+    print("OK: Byte-based size check tests passed")
+
+
+def test_webhook_idempotency_logic():
+    """Test delivery ID deduplication logic."""
+
+    seen = {}
+
+    def process_delivery(delivery_id):
+        if delivery_id and delivery_id in seen:
+            return "duplicate"
+        if delivery_id:
+            seen[delivery_id] = True
+        return "processed"
+
+    # First delivery processes normally
+    assert process_delivery("abc-123") == "processed"
+
+    # Same delivery ID is a duplicate
+    assert process_delivery("abc-123") == "duplicate"
+
+    # Different delivery ID processes normally
+    assert process_delivery("xyz-456") == "processed"
+
+    # Empty delivery ID always processes (no dedup)
+    assert process_delivery("") == "processed"
+    assert process_delivery("") == "processed"
+
+    print("OK: Webhook idempotency tests passed")
+
+
 def run_all_tests():
     """Run all test functions."""
     print("Running Toasty Worker Tests...\n")
@@ -164,7 +315,13 @@ def run_all_tests():
         test_json_response_structure()
         test_error_response_structure()
         test_review_request_validation()
-        
+        test_verify_github_signature()
+        test_webhook_plan_command_parsing()
+        test_webhook_event_filtering()
+        test_plan_command_exact_match()
+        test_webhook_byte_size_check()
+        test_webhook_idempotency_logic()
+
         print("\n" + "="*50)
         print("All tests passed! ✓")
         print("="*50)

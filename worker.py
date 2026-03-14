@@ -5,12 +5,145 @@ This worker handles API requests for the Toasty AI code review service.
 It provides endpoints for code analysis, health checks, and status monitoring.
 """
 
-from js import Response, Headers
+from js import Response, Headers, fetch as js_fetch
 import json
+import hmac
+import hashlib
+from datetime import datetime, timezone
+try:
+    from google import genai as google_genai
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
 
 # Maximum request body size in bytes (1MB)
 MAX_BODY_SIZE = 1024 * 1024
 
+
+
+def verify_github_signature(payload_body: str, secret: str, signature_header: str) -> bool:
+    """Validate GitHub webhook X-Hub-Signature-256 header."""
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected = "sha256=" + hmac.new(
+        secret.encode("utf-8"),
+        payload_body.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+async def generate_plan(issue_title: str, issue_body: str, env) -> str:
+    """Generate an implementation plan using Gemini."""
+    try:
+        if not _GENAI_AVAILABLE:
+            return "⚠️ AI plan generation is unavailable: google-genai not installed."
+        api_key = getattr(env, "GEMINI_API_KEY", None)
+        if not api_key:
+            return "⚠️ AI plan generation is unavailable: missing GEMINI_API_KEY."
+        prompt = f"""You are a senior software engineer.
+Generate a clear, step-by-step implementation plan for the following GitHub issue.
+
+**Issue Title:** {issue_title}
+
+**Issue Description:**
+{issue_body or 'No description provided.'}
+
+Respond with a numbered markdown list of implementation steps."""
+        async with google_genai.Client(api_key=api_key).aio as client:
+            response = await client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+        return f"## 🗺️ AI-Generated Implementation Plan\n\n{response.text}"
+    except Exception as e:
+        print(f"generate_plan error: {e}")
+        return "⚠️ Failed to generate plan. Please try again later."
+
+
+async def post_github_comment(repo_full_name: str, issue_number: int, body: str, env) -> bool:
+    """Post a comment on a GitHub issue. Returns True on success, False on failure."""
+    token = getattr(env, "GITHUB_TOKEN", None)
+    if not token or not repo_full_name or not issue_number:
+        return False
+    url = f"https://api.github.com/repos/{repo_full_name}/issues/{issue_number}/comments"
+    payload = json.dumps({"body": body})
+    headers = Headers.new()
+    headers.set("Authorization", f"Bearer {token}")
+    headers.set("Content-Type", "application/json")
+    headers.set("Accept", "application/vnd.github+json")
+    headers.set("X-GitHub-Api-Version", "2022-11-28")
+    headers.set("User-Agent", "BLT-Toasty/1.0")
+    try:
+        response = await js_fetch(url, method="POST", headers=headers, body=payload)
+        return response.status == 201
+    except Exception:
+        return False
+
+
+async def handle_webhook(request, env):
+    """Handle incoming GitHub webhook events."""
+    content_length = request.headers.get("Content-Length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_BODY_SIZE:
+                return create_error_response("Payload too large", 413)
+        except ValueError:
+            pass
+    body = await request.text()
+    if len(body.encode("utf-8")) > MAX_BODY_SIZE:
+        return create_error_response("Payload too large", 413)
+
+    # Idempotency: deduplicate webhook redeliveries via X-GitHub-Delivery ID
+    delivery_id = request.headers.get("X-GitHub-Delivery", "")
+    if delivery_id:
+        kv = getattr(env, "TOASTY_KV", None)
+        if kv:
+            existing = await kv.get(f"delivery:{delivery_id}")
+            if existing:
+                return create_json_response({"status": "duplicate", "delivery_id": delivery_id}, 200)
+
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    secret = getattr(env, "GITHUB_WEBHOOK_SECRET", None)
+    if not secret or not verify_github_signature(body, secret, sig):
+        return create_error_response("Unauthorized: invalid signature", 401)
+
+    event = request.headers.get("X-GitHub-Event", "")
+    if event != "issue_comment":
+        return create_json_response({"status": "ignored", "event": event}, 200)
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return create_error_response("Invalid JSON payload", 400)
+
+    if payload.get("action") != "created":
+        return create_json_response({"status": "ignored", "action": payload.get("action")}, 200)
+
+    comment_body = payload.get("comment", {}).get("body", "").strip()
+    if comment_body != "/plan" and not comment_body.startswith("/plan "):
+        return create_json_response({"status": "ignored", "reason": "not a /plan command"}, 200)
+
+    issue = payload.get("issue", {})
+    repo = payload.get("repository", {})
+    issue_number = issue.get("number")
+    repo_full_name = repo.get("full_name")
+    issue_title = issue.get("title", "")
+    issue_body = issue.get("body", "")
+
+    plan = await generate_plan(issue_title, issue_body, env)
+    posted = await post_github_comment(repo_full_name, issue_number, plan, env)
+
+    if not posted:
+        return create_error_response("Failed to post plan comment to GitHub", 502)
+
+    # Store delivery ID to prevent duplicate processing on redelivery
+    if delivery_id:
+        kv = getattr(env, "TOASTY_KV", None)
+        if kv:
+            await kv.put(f"delivery:{delivery_id}", "1", expiration_ttl=86400)  # 24h TTL
+
+    return create_json_response({"status": "ok", "command": "/plan"}, 200)
 
 
 def parse_path(url):
@@ -90,6 +223,11 @@ async def on_fetch(request, env):
             return handle_status(request)
         else:
             return create_method_not_allowed_response(path, ['GET', 'HEAD'])
+    elif path == '/webhook':
+        if method == 'POST':
+            return await handle_webhook(request, env)
+        else:
+            return create_method_not_allowed_response(path, ['POST'])
     else:
         return create_error_response(f"Not Found: {path}", 404)
 
@@ -131,7 +269,8 @@ def handle_root(request):
             "/": "Service information",
             "/health": "Health check endpoint",
             "/api/review": "POST - Submit code for review",
-            "/api/status": "GET - Check service status"
+            "/api/status": "GET - Check service status",
+            "/webhook": "POST - Receive GitHub webhook events (issue_comment /plan command)"
         }
     }
     
@@ -185,7 +324,7 @@ async def handle_review(request, env):
         # Parse request body with size limit
         body = await request.text()
         
-        if len(body) > MAX_BODY_SIZE:
+        if len(body.encode("utf-8")) > MAX_BODY_SIZE:
             return create_error_response(
                 f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes",
                 413

@@ -34,9 +34,10 @@ name = "toasty-backend-dev"
 # zone_name = "example.com"
 
 # KV Namespaces for storage (if needed)
-# [[kv_namespaces]]
-# binding = "TOASTY_KV"
-# id = ""
+[[kv_namespaces]]
+binding = "TOASTY_KV"
+id = ""
+preview_id = ""
 
 # Durable Objects (if needed for stateful operations)
 # [[durable_objects.bindings]]
@@ -49,6 +50,10 @@ name = "toasty-backend-dev"
 # bucket_name = "toasty-files"
 
 # Environment variables (secrets should be set via wrangler secret put)
+# Required secrets — set with: wrangler secret put <NAME>
+# GITHUB_WEBHOOK_SECRET  — GitHub webhook secret for HMAC validation
+# GITHUB_TOKEN           — GitHub personal access token for posting comments
+# GEMINI_API_KEY         — Google Gemini API key for plan generation
 [vars]
 ENVIRONMENT = "development"
 LOG_LEVEL = "info"
