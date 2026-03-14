@@ -1,7 +1,11 @@
 import json
+import logging
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from google import genai
+
+logger = logging.getLogger(__name__)
 
 
 def index(request):
@@ -33,7 +37,7 @@ def review(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     code = data.get("code", "").strip()
-    language = data.get("language", "unknown")
+    language = data.get("language", "unknown")[:50]  # enforce DB max_length
     context = data.get("context", "")
 
     if not code:
@@ -44,7 +48,6 @@ def review(request):
         return JsonResponse({"error": "GEMINI_API_KEY is not configured"}, status=500)
 
     try:
-        from google import genai
         client = genai.Client(api_key=api_key)
         prompt = (
             f"Review the following {language} code and provide:\n"
@@ -79,9 +82,10 @@ def review(request):
                 review_result=review_data
             )
         except Exception:
-            pass  # Do not fail the response if persistence fails
+            logger.warning("Failed to persist CodeReview", exc_info=True)
 
         return JsonResponse({"status": "success", "analysis": review_data})
 
     except Exception as e:
+        logger.exception("Gemini API call failed")
         return JsonResponse({"error": "Review failed. Please try again later."}, status=500)

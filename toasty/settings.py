@@ -9,9 +9,9 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WORKER_SECRET = os.getenv("WORKER_SECRET")
 
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 
 # Application definition
