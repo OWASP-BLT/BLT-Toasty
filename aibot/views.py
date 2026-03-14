@@ -19,11 +19,13 @@ def review(request):
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
     # Service-level authentication via shared bearer token
+    # Fail closed: if WORKER_SECRET is not configured, reject all requests
     expected_token = getattr(settings, "WORKER_SECRET", None)
-    if expected_token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header != f"Bearer {expected_token}":
-            return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not expected_token:
+        return JsonResponse({"error": "Service authentication not configured"}, status=503)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header != f"Bearer {expected_token}":
+        return JsonResponse({"error": "Unauthorized"}, status=401)
 
     try:
         data = json.loads(request.body)
