@@ -191,11 +191,14 @@ def test_verify_github_signature():
 def test_webhook_plan_command_parsing():
     """Test /plan command detection logic."""
     def is_plan_command(comment_body):
-        return comment_body == "/plan" or comment_body.startswith("/plan ")
+        stripped = comment_body.strip()
+        return stripped == "/plan" or stripped.startswith("/plan ")
 
     # Valid commands
     assert is_plan_command("/plan") is True
     assert is_plan_command("/plan please") is True
+    assert is_plan_command("  /plan  ") is True
+    assert is_plan_command("  /plan please  ") is True
 
     # Invalid - must not match prefix only
     assert is_plan_command("/planning") is False
@@ -231,7 +234,8 @@ def test_webhook_event_filtering():
 def test_plan_command_exact_match():
     """Test /plan is matched exactly, not as a prefix."""
     def is_plan_command(comment_body):
-        return comment_body == "/plan" or comment_body.startswith("/plan ")
+        stripped = comment_body.strip()
+        return stripped == "/plan" or stripped.startswith("/plan ")
 
     # Valid
     assert is_plan_command("/plan") is True
@@ -259,6 +263,34 @@ def test_webhook_byte_size_check():
     print("OK: Byte-based size check tests passed")
 
 
+def test_webhook_idempotency_logic():
+    """Test delivery ID deduplication logic."""
+
+    seen = {}
+
+    def process_delivery(delivery_id):
+        if delivery_id and delivery_id in seen:
+            return "duplicate"
+        if delivery_id:
+            seen[delivery_id] = True
+        return "processed"
+
+    # First delivery processes normally
+    assert process_delivery("abc-123") == "processed"
+
+    # Same delivery ID is a duplicate
+    assert process_delivery("abc-123") == "duplicate"
+
+    # Different delivery ID processes normally
+    assert process_delivery("xyz-456") == "processed"
+
+    # Empty delivery ID always processes (no dedup)
+    assert process_delivery("") == "processed"
+    assert process_delivery("") == "processed"
+
+    print("OK: Webhook idempotency tests passed")
+
+
 def run_all_tests():
     """Run all test functions."""
     print("Running Toasty Worker Tests...\n")
@@ -273,6 +305,7 @@ def run_all_tests():
         test_webhook_event_filtering()
         test_plan_command_exact_match()
         test_webhook_byte_size_check()
+        test_webhook_idempotency_logic()
 
         print("\n" + "="*50)
         print("All tests passed! ✓")

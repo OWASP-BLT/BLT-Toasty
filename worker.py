@@ -95,6 +95,15 @@ async def handle_webhook(request, env):
     if len(body.encode("utf-8")) > MAX_BODY_SIZE:
         return create_error_response("Payload too large", 413)
 
+    # Idempotency: deduplicate webhook redeliveries via X-GitHub-Delivery ID
+    delivery_id = request.headers.get("X-GitHub-Delivery", "")
+    if delivery_id:
+        kv = getattr(env, "TOASTY_KV", None)
+        if kv:
+            existing = await kv.get(f"delivery:{delivery_id}")
+            if existing:
+                return create_json_response({"status": "duplicate", "delivery_id": delivery_id}, 200)
+
     sig = request.headers.get("X-Hub-Signature-256", "")
     secret = getattr(env, "GITHUB_WEBHOOK_SECRET", None)
     if not secret or not verify_github_signature(body, secret, sig):
@@ -128,6 +137,12 @@ async def handle_webhook(request, env):
 
     if not posted:
         return create_error_response("Failed to post plan comment to GitHub", 502)
+
+    # Store delivery ID to prevent duplicate processing on redelivery
+    if delivery_id:
+        kv = getattr(env, "TOASTY_KV", None)
+        if kv:
+            await kv.put(f"delivery:{delivery_id}", "1", expiration_ttl=86400)  # 24h TTL
 
     return create_json_response({"status": "ok", "command": "/plan"}, 200)
 
