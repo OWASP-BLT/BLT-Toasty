@@ -251,14 +251,29 @@ def test_plan_command_exact_match():
 
 def test_webhook_byte_size_check():
     """Test that size check uses byte length not character count."""
-    # ASCII: same length
-    ascii_str = "a" * 10
-    assert len(ascii_str.encode("utf-8")) == 10
+    MAX_BODY_SIZE = 1024 * 1024
 
-    # Multibyte UTF-8: byte length > char length
-    multibyte_str = "\u00e9" * 10  # é = 2 bytes each
-    assert len(multibyte_str.encode("utf-8")) == 20
-    assert len(multibyte_str) == 10
+    def is_too_large(body):
+        """Mirror the exact predicate used in worker.py."""
+        return len(body.encode("utf-8")) > MAX_BODY_SIZE
+
+    # ASCII just under limit — must pass
+    ascii_ok = "a" * MAX_BODY_SIZE
+    assert not is_too_large(ascii_ok)
+
+    # ASCII over limit — must fail
+    ascii_over = "a" * (MAX_BODY_SIZE + 1)
+    assert is_too_large(ascii_over)
+
+    # Multibyte: half the char count but still over limit in bytes
+    # é = 2 bytes, so MAX_BODY_SIZE/2 + 1 chars exceeds the byte limit
+    multibyte_over = "\u00e9" * (MAX_BODY_SIZE // 2 + 1)
+    assert len(multibyte_over) < MAX_BODY_SIZE  # char count under limit
+    assert is_too_large(multibyte_over)          # byte count over limit
+
+    # Multibyte just under limit in bytes
+    multibyte_ok = "\u00e9" * (MAX_BODY_SIZE // 2 - 1)
+    assert not is_too_large(multibyte_ok)
 
     print("OK: Byte-based size check tests passed")
 

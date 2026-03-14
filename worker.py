@@ -41,7 +41,6 @@ async def generate_plan(issue_title: str, issue_body: str, env) -> str:
         api_key = getattr(env, "GEMINI_API_KEY", None)
         if not api_key:
             return "⚠️ AI plan generation is unavailable: missing GEMINI_API_KEY."
-        genai = google_genai
         prompt = f"""You are a senior software engineer.
 Generate a clear, step-by-step implementation plan for the following GitHub issue.
 
@@ -51,11 +50,11 @@ Generate a clear, step-by-step implementation plan for the following GitHub issu
 {issue_body or 'No description provided.'}
 
 Respond with a numbered markdown list of implementation steps."""
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
-        )
+        async with google_genai.Client(api_key=api_key).aio as client:
+            response = await client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
         return f"## 🗺️ AI-Generated Implementation Plan\n\n{response.text}"
     except Exception as e:
         print(f"generate_plan error: {e}")
