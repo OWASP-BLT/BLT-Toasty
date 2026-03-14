@@ -110,6 +110,11 @@ class ReviewEndpointTests(TestCase):
         data = resp.json()
         self.assertEqual(data["status"], "success")
         self.assertIn("analysis", data)
+        analysis = data["analysis"]
+        self.assertIn("issues", analysis)
+        self.assertIn("security_concerns", analysis)
+        self.assertIn("suggestions", analysis)
+        self.assertIn("summary", analysis)
 
     def test_gemini_failure_returns_500(self):
         """Gemini API failure returns 500 with generic message."""

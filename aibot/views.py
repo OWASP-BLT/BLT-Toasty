@@ -62,7 +62,10 @@ def review(request):
         return JsonResponse({"error": "GEMINI_API_KEY is not configured"}, status=500)
 
     try:
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(
+            api_key=api_key,
+            http_options={"timeout": 30000}  # 30 second timeout in ms
+        )
         prompt = (
             f"Review the following {language} code and provide:\n"
             f"1. A list of bugs or issues\n"
@@ -83,9 +86,28 @@ def review(request):
         if clean.startswith("```"):
             clean = clean.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         try:
-            review_data = json.loads(clean)
+            parsed = json.loads(clean)
         except json.JSONDecodeError:
-            review_data = {"summary": review_text}
+            parsed = None
+
+        # Normalize: always return the four expected keys regardless of
+        # what Gemini returned (dict, list, string, number, or parse failure)
+        if isinstance(parsed, dict):
+            review_data = {
+                "issues": parsed.get("issues", []),
+                "security_concerns": parsed.get("security_concerns", []),
+                "suggestions": parsed.get("suggestions", []),
+                "summary": parsed.get("summary", review_text),
+            }
+        else:
+            # Non-dict response (list, string, number) or parse failure
+            review_data = {
+                "issues": [],
+                "security_concerns": [],
+                "suggestions": [],
+                "summary": review_text,
+            }
+
 
         # Persist review result
         try:
