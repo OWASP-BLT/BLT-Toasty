@@ -51,7 +51,7 @@ Respond with a numbered markdown list of implementation steps."""
         )
         return f"## 🗺️ AI-Generated Implementation Plan\n\n{response.text}"
     except Exception as e:
-        return f"⚠️ Failed to generate plan: {str(e)}"
+        return "⚠️ Failed to generate plan. Please try again later."
 
 
 async def post_github_comment(repo_full_name: str, issue_number: int, body: str, env) -> bool:

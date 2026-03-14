@@ -6,7 +6,7 @@
 # Most standard library modules are available in Cloudflare Workers Python runtime
 
 # For future integration with AI services
-# google-genai>=1.52.0
+google-genai>=1.52.0
 # langchain>=1.0.8
 
 # For security scanning integration

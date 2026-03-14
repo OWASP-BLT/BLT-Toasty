@@ -190,11 +190,19 @@ def test_verify_github_signature():
 
 def test_webhook_plan_command_parsing():
     """Test /plan command detection logic."""
-    assert "/plan".startswith("/plan") is True
-    assert "/plan please".startswith("/plan") is True
-    assert "/review".startswith("/plan") is False
-    assert "hello /plan".startswith("/plan") is False
-    assert "".startswith("/plan") is False
+    def is_plan_command(comment_body):
+        return comment_body == "/plan" or comment_body.startswith("/plan ")
+
+    # Valid commands
+    assert is_plan_command("/plan") is True
+    assert is_plan_command("/plan please") is True
+
+    # Invalid - must not match prefix only
+    assert is_plan_command("/planning") is False
+    assert is_plan_command("/planx") is False
+    assert is_plan_command("/review") is False
+    assert is_plan_command("hello /plan") is False
+    assert is_plan_command("") is False
     print("OK: /plan command parsing tests passed")
 
 
