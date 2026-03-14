@@ -49,6 +49,10 @@ name = "toasty-backend-dev"
 # bucket_name = "toasty-files"
 
 # Environment variables (secrets should be set via wrangler secret put)
+# Required secrets — set with: wrangler secret put <NAME>
+# GITHUB_WEBHOOK_SECRET  — GitHub webhook secret for HMAC validation
+# GITHUB_TOKEN           — GitHub personal access token for posting comments
+# GEMINI_API_KEY         — Google Gemini API key for plan generation
 [vars]
 ENVIRONMENT = "development"
 LOG_LEVEL = "info"

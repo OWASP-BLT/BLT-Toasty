@@ -30,3 +30,7 @@ jobs:
       - name: Run pre-commit hooks
         run: |
           pre-commit run --all-files
+
+      - name: Run worker tests
+        run: |
+          python test_worker.py

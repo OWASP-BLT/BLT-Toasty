@@ -213,14 +213,18 @@ def test_webhook_event_filtering():
             return False
         if action != "created":
             return False
-        if not comment_body.strip().startswith("/plan"):
+        stripped = comment_body.strip()
+        if stripped != "/plan" and not stripped.startswith("/plan "):
             return False
         return True
 
     assert should_process("issue_comment", "created", "/plan") is True
+    assert should_process("issue_comment", "created", "/plan please") is True
     assert should_process("pull_request", "created", "/plan") is False
     assert should_process("issue_comment", "edited", "/plan") is False
     assert should_process("issue_comment", "created", "just a comment") is False
+    assert should_process("issue_comment", "created", "/planning") is False
+    assert should_process("issue_comment", "created", "/planx") is False
     print("OK: Webhook event filtering tests passed")
 
 

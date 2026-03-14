@@ -10,6 +10,11 @@ import json
 import hmac
 import hashlib
 from datetime import datetime, timezone
+try:
+    from google import genai as google_genai
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
 
 # Maximum request body size in bytes (1MB)
 MAX_BODY_SIZE = 1024 * 1024
@@ -31,10 +36,12 @@ def verify_github_signature(payload_body: str, secret: str, signature_header: st
 async def generate_plan(issue_title: str, issue_body: str, env) -> str:
     """Generate an implementation plan using Gemini."""
     try:
-        from google import genai
+        if not _GENAI_AVAILABLE:
+            return "⚠️ AI plan generation is unavailable: google-genai not installed."
         api_key = getattr(env, "GEMINI_API_KEY", None)
         if not api_key:
             return "⚠️ AI plan generation is unavailable: missing GEMINI_API_KEY."
+        genai = google_genai
         prompt = f"""You are a senior software engineer.
 Generate a clear, step-by-step implementation plan for the following GitHub issue.
 
@@ -51,6 +58,7 @@ Respond with a numbered markdown list of implementation steps."""
         )
         return f"## 🗺️ AI-Generated Implementation Plan\n\n{response.text}"
     except Exception as e:
+        print(f"generate_plan error: {e}")
         return "⚠️ Failed to generate plan. Please try again later."
 
 
@@ -67,8 +75,11 @@ async def post_github_comment(repo_full_name: str, issue_number: int, body: str,
     headers.set("Accept", "application/vnd.github+json")
     headers.set("X-GitHub-Api-Version", "2022-11-28")
     headers.set("User-Agent", "BLT-Toasty/1.0")
-    response = await js_fetch(url, method="POST", headers=headers, body=payload)
-    return response.status == 201
+    try:
+        response = await js_fetch(url, method="POST", headers=headers, body=payload)
+        return response.status == 201
+    except Exception:
+        return False
 
 
 async def handle_webhook(request, env):
@@ -299,7 +310,7 @@ async def handle_review(request, env):
         # Parse request body with size limit
         body = await request.text()
         
-        if len(body) > MAX_BODY_SIZE:
+        if len(body.encode("utf-8")) > MAX_BODY_SIZE:
             return create_error_response(
                 f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes",
                 413
