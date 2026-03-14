@@ -1,131 +1,149 @@
 # Toasty 🍞
 
-A GitHub App that responds to `/plan` commands on issues and provides a structured code implementation plan.
+The smart, context-aware AI code reviewer from OWASP BLT.
+
+## Overview
+
+Toasty is an AI-powered code review service designed to help developers improve code quality through automated analysis and intelligent suggestions. It consists of:
+
+- **Django Application** (`/aibot`, `/toasty`) - Main Django-based application
+- **Cloudflare Worker** (root directory) - Serverless Python backend using Cloudflare Workers
+- **GitHub App** (`app.js`) - Responds to `/plan` and other slash commands on issues
 
 ## Features
 
-- 🤖 Responds to `/plan` commands in issue comments
-- 📋 Generates structured implementation plans
-- 🚀 Built with Probot framework for reliability
+- 🤖 **AI Code Reviews** - Automated, security-focused analysis of pull requests
+- 📋 **/plan Command** - Comment `/plan` on any issue to receive a structured implementation plan
+- 🚀 **Serverless Architecture** - Built on Cloudflare Workers for global low-latency
+- 🔐 **Security-First** - HMAC signature validation, OWASP Top 10 detection
 
-## How to Use
+## Using the /plan Command
 
-Once installed on a repository, simply comment `/plan` on any issue, and Toasty will respond with a structured code plan based on the issue title and description.
+Once Toasty is installed on a repository, comment `/plan` on any issue to receive a structured code implementation plan:
 
-### Example
+1. Open or create an issue
+2. Comment: `/plan`
+3. Toasty responds with a detailed 6-step plan based on the issue title and description
 
-1. Create or open an issue
-2. Add a comment: `/plan`
-3. Toasty will respond with a detailed implementation plan
+## Project Structure
 
-## Setup
+```
+toasty/
+├── app.js              # GitHub App webhook handler (/plan command)
+├── app.yml             # GitHub App configuration
+├── worker.py           # Cloudflare Worker backend
+├── wrangler.toml       # Cloudflare Workers configuration
+├── test_worker.py      # Worker tests
+├── aibot/              # Django app for AI bot functionality
+├── toasty/             # Django project settings
+└── docs/               # GitHub Pages documentation
+```
+
+## Components
+
+### GitHub App (Slash Commands)
+
+The GitHub App listens for issue comments and responds to slash commands like `/plan`.
+
+**Setup:**
+```bash
+# Install Node dependencies
+npm install
+
+# Start the GitHub App locally
+npm start
+```
+
+Configure environment variables (copy `.env.example` to `.env`):
+- `APP_ID` - Your GitHub App ID
+- `WEBHOOK_SECRET` - Your webhook secret
+- `PRIVATE_KEY_PATH` - Path to your private key
+
+### Django Application
+
+The main Django application provides the core functionality for Toasty.
+
+**Setup:**
+```bash
+# Install dependencies
+poetry install
+
+# Run migrations
+python manage.py migrate
+
+# Start the development server
+python manage.py runserver
+```
+
+### Cloudflare Worker Backend
+
+A serverless backend built with Cloudflare Workers and Python for globally distributed, low-latency API endpoints.
+
+**Features:**
+- Health monitoring endpoints
+- Code review API
+- Status monitoring
+- CORS support with preflight handling
+- Comprehensive error handling and validation
+
+**Quick Start:**
+```bash
+# Install Node dependencies (including Wrangler CLI)
+npm install
+
+# Run locally
+npm run dev
+
+# Deploy
+npm run deploy
+```
+
+## API Endpoints
+
+The Cloudflare Worker provides these REST endpoints:
+
+- `GET /` - Service information
+- `GET /health` - Health check
+- `POST /api/review` - Submit code for review
+- `GET /api/status` - Service status
+
+See `worker.py` for detailed API documentation.
+
+## Development
 
 ### Prerequisites
 
-- Node.js 18 or higher
-- A GitHub account
+- Python >=3.13,<4.0.0
+- Poetry (for Django app)
+- Node.js 18+ and npm (for Cloudflare Worker and GitHub App)
 
-### Local Development
+### Installation
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/OWASP-BLT/Toasty.git
-   cd Toasty
-   ```
+1. Clone the repository
+2. Install Django dependencies: `poetry install`
+3. Install Worker/App dependencies: `npm install`
+4. Copy `.env.example` to `.env` and fill in your values
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Architecture
 
-3. Create a GitHub App:
-   - Go to [GitHub Apps settings](https://github.com/settings/apps/new)
-   - Set the following:
-     - **GitHub App name**: Choose a unique name
-     - **Homepage URL**: Your repository URL
-     - **Webhook URL**: Your webhook URL (use [Smee.io](https://smee.io) for local testing)
-     - **Webhook secret**: Generate a random string
-     - **Permissions**: 
-       - Issues: Read & Write
-       - Contents: Read-only
-     - **Subscribe to events**: Issue comment
-   - Click "Create GitHub App"
-   - Generate and download a private key
+### Core Flow
 
-4. Configure environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` and add your values:
-   ```
-   APP_ID=your-app-id
-   WEBHOOK_SECRET=your-webhook-secret
-   PRIVATE_KEY_PATH=path-to-your-private-key.pem
-   ```
+1. GitHub sends webhook → Cloudflare Worker
+2. Worker validates signature
+3. Worker fetches PR data from GitHub API
+4. Worker sends structured context to AI agent
+5. Worker posts AI review back to GitHub
 
-5. Install the app on a repository:
-   - Go to your app's settings page
-   - Click "Install App"
-   - Choose repositories to install on
-
-6. Start the development server:
-   ```bash
-   npm start
-   ```
-
-   For development with auto-reload:
-   ```bash
-   npm run dev
-   ```
-
-## Deployment
-
-### Deploy to Heroku
-
-1. Create a new Heroku app:
-   ```bash
-   heroku create
-   ```
-
-2. Set environment variables:
-   ```bash
-   heroku config:set APP_ID=your-app-id
-   heroku config:set WEBHOOK_SECRET=your-webhook-secret
-   heroku config:set PRIVATE_KEY="$(cat your-private-key.pem)"
-   ```
-
-3. Deploy:
-   ```bash
-   git push heroku main
-   ```
-
-### Deploy to Glitch
-
-1. Go to [Glitch](https://glitch.com)
-2. Click "New Project" → "Import from GitHub"
-3. Enter `OWASP-BLT/Toasty`
-4. Add your environment variables in the `.env` file
-
-## Configuration
-
-The app can be configured using environment variables:
-
-- `APP_ID`: Your GitHub App ID
-- `WEBHOOK_SECRET`: Your webhook secret
-- `PRIVATE_KEY_PATH`: Path to your private key file
-- `PRIVATE_KEY`: Or paste your private key directly
-- `PORT`: Port to run the app on (default: 3000)
-- `LOG_LEVEL`: Logging level (default: info)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+For the `/plan` command:
+1. User comments `/plan` on an issue
+2. GitHub App receives webhook
+3. App generates structured implementation plan
+4. App posts plan as a comment
 
 ## License
 
-MIT
+GNU Affero General Public License v3 - see [LICENSE](LICENSE) for details.
 
-## Support
+## Contributing
 
-For issues and questions, please open an issue on the [GitHub repository](https://github.com/OWASP-BLT/Toasty/issues).
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) and ensure all changes are tested before submitting.

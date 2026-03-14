@@ -1,28 +1,36 @@
 {
   "name": "toasty",
   "version": "1.0.0",
-  "description": "A GitHub App that responds to /plan commands on issues",
-  "main": "app.js",
+  "description": "AI-powered GitHub assistant with code review and /plan command support",
+  "private": true,
   "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env development",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:prod": "wrangler deploy --env production",
+    "tail": "wrangler tail",
+    "tail:prod": "wrangler tail --env production",
     "start": "probot run ./app.js",
-    "dev": "nodemon --exec 'probot run ./app.js'"
+    "start:dev": "nodemon --exec 'probot run ./app.js'"
   },
   "keywords": [
+    "cloudflare",
+    "workers",
+    "python",
+    "toasty",
+    "code-review",
+    "ai",
     "probot",
-    "probot-app",
-    "github-app",
-    "automation"
+    "github-app"
   ],
-  "author": "OWASP-BLT",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/OWASP-BLT/Toasty.git"
-  },
+  "author": "OWASP BLT",
+  "license": "AGPL-3.0",
   "dependencies": {
     "probot": "^14.2.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "wrangler": "^4.0.0"
   }
 }
