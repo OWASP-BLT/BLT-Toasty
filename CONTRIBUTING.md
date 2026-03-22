@@ -76,12 +76,10 @@ cp .env.example .env
 | Variable            | Description                                      | Required |
 |---------------------|--------------------------------------------------|----------|
 | `SECRET_KEY`        | Django secret key — run `python -c "import secrets; print(secrets.token_hex(50))"` to generate one | Yes      |
-| `GEMINI_API_KEY`    | Google Gemini API key for AI features            | Yes      |
 | `POSTGRES_USER`     | PostgreSQL username                              | Yes      |
 | `POSTGRES_DB`       | PostgreSQL database name                         | Yes      |
 | `POSTGRES_PASSWORD` | PostgreSQL password                              | Yes      |
-| `POSTGRES_PORT`     | PostgreSQL port (default: `5432`)                | No       |
-| `PORT`              | Application port (default: `8000`)               | No       |
+| `GEMINI_API_KEY`    | Google Gemini API key (optional — not yet wired into the app, reserved for future AI features) | No       |
 
 > **Never commit your `.env` file.** It is already listed in `.gitignore`.
 
@@ -105,9 +103,13 @@ To run only the backing services (so you can run Django locally):
 docker compose up db redis qdrant
 ```
 
-### Option B: Running Locally
+### Option B: Running Without Docker (Advanced)
 
-Ensure your backing services (PostgreSQL, Redis, Qdrant) are running, then:
+> **Note:** The current Django configuration hardcodes the database host as `db` and the Celery broker as `redis://redis:6379/0` to match Docker Compose service names. Running Django directly on your host machine requires either:
+> - Adding `db` and `redis` entries to your `/etc/hosts` pointing to `127.0.0.1`, or
+> - Temporarily updating `DATABASES["HOST"]` and `CELERY_BROKER_URL` in `toasty/settings.py` to use `localhost`.
+
+Once your backing services are reachable, run:
 
 ```bash
 # Apply database migrations
@@ -186,7 +188,7 @@ python manage.py test
 ### Cloudflare Worker Tests
 
 ```bash
-python -m pytest test_worker.py
+python test_worker.py
 ```
 
 ---
@@ -206,7 +208,7 @@ python -m pytest test_worker.py
    ```bash
    pre-commit run --all-files
    python manage.py test
-   python -m pytest test_worker.py
+   python test_worker.py
    ```
 
 4. Commit your changes with a clear, descriptive message.
