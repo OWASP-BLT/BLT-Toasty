@@ -90,6 +90,11 @@ async def on_fetch(request, env):
             return handle_status(request)
         else:
             return create_method_not_allowed_response(path, ['GET', 'HEAD'])
+    elif path == '/webhook/github':
+        if method == 'POST':
+            return await handle_github_webhook(request, env)
+        else:
+            return create_method_not_allowed_response(path, ['POST'])
     else:
         return create_error_response(f"Not Found: {path}", 404)
 
@@ -242,6 +247,128 @@ async def handle_review(request, env):
         
     except Exception as e:
         return create_error_response(f"Error processing review request: {str(e)}", 500)
+
+
+import hmac
+import hashlib
+
+
+def verify_signature(payload_body: str, signature_header: str, secret: str) -> bool:
+    """Verify GitHub webhook HMAC-SHA256 signature using constant-time comparison."""
+    if not signature_header or not signature_header.startswith('sha256='):
+        return False
+    expected = 'sha256=' + hmac.new(
+        secret.encode('utf-8'),
+        payload_body.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+async def handle_github_webhook(request, env):
+    """
+    Handle incoming GitHub webhook events.
+    Validates HMAC-SHA256 signature and routes to appropriate handler.
+
+    Requires GITHUB_WEBHOOK_SECRET set via: wrangler secret put GITHUB_WEBHOOK_SECRET
+    """
+    # Read body first for signature validation
+    body = await request.text()
+
+    # Validate HMAC-SHA256 signature
+    webhook_secret = getattr(env, 'GITHUB_WEBHOOK_SECRET', None)
+    if webhook_secret:
+        signature = request.headers.get('X-Hub-Signature-256', '')
+        if not verify_signature(body, signature, webhook_secret):
+            return create_error_response("Invalid webhook signature", 401)
+
+    # Parse event type
+    event_type = request.headers.get('X-GitHub-Event', '')
+    delivery_id = request.headers.get('X-GitHub-Delivery', '')
+
+    if not body:
+        return create_error_response("Empty webhook payload", 400)
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return create_error_response("Invalid JSON payload", 400)
+
+    # Shape check
+    if not isinstance(payload, dict):
+        return create_error_response("Webhook payload must be a JSON object", 400)
+
+    # Route to correct handler
+    if event_type == 'pull_request':
+        return await handle_pull_request_event(payload, env, delivery_id)
+    elif event_type == 'issue_comment':
+        return await handle_issue_comment_event(payload, env, delivery_id)
+    elif event_type == 'ping':
+        return create_json_response({
+            "message": "pong",
+            "delivery_id": delivery_id,
+            "hook_id": payload.get("hook_id")
+        }, 200)
+    else:
+        return create_json_response({
+            "message": f"Unhandled event: {event_type}",
+            "delivery_id": delivery_id
+        }, 200)
+
+
+async def handle_pull_request_event(payload: dict, env, delivery_id: str):
+    """Handle pull_request webhook events."""
+    action = payload.get('action', '')
+    pr = payload.get('pull_request', {})
+    repo = payload.get('repository', {})
+
+    pr_number = pr.get('number')
+    pr_title = pr.get('title', '')
+    repo_full_name = repo.get('full_name', '')
+
+    # Only process opened and synchronize actions
+    if action not in ('opened', 'synchronize'):
+        return create_json_response({
+            "message": f"Skipped pull_request action: {action}",
+            "delivery_id": delivery_id
+        }, 200)
+
+    return create_json_response({
+        "message": "Pull request event received",
+        "action": action,
+        "pr_number": pr_number,
+        "pr_title": pr_title,
+        "repo": repo_full_name,
+        "delivery_id": delivery_id
+    }, 200)
+
+
+async def handle_issue_comment_event(payload: dict, env, delivery_id: str):
+    """Handle issue_comment webhook events."""
+    action = payload.get('action', '')
+    comment = payload.get('comment', {})
+    issue = payload.get('issue', {})
+    repo = payload.get('repository', {})
+
+    comment_body = comment.get('body', '')
+    issue_number = issue.get('number')
+    repo_full_name = repo.get('full_name', '')
+
+    # Only process created comments
+    if action != 'created':
+        return create_json_response({
+            "message": f"Skipped issue_comment action: {action}",
+            "delivery_id": delivery_id
+        }, 200)
+
+    return create_json_response({
+        "message": "Issue comment event received",
+        "action": action,
+        "issue_number": issue_number,
+        "comment_preview": comment_body[:100],
+        "repo": repo_full_name,
+        "delivery_id": delivery_id
+    }, 200)
 
 
 def handle_status(request):
