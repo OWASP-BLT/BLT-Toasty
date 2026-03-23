@@ -5,8 +5,10 @@ This worker handles API requests for the Toasty AI code review service.
 It provides endpoints for code analysis, health checks, and status monitoring.
 """
 
-from js import Response, Headers
+from js import Response, Headers, fetch as js_fetch
 import json
+import hmac
+import hashlib
 
 # Maximum request body size in bytes (1MB)
 MAX_BODY_SIZE = 1024 * 1024
@@ -136,7 +138,8 @@ def handle_root(request):
             "/": "Service information",
             "/health": "Health check endpoint",
             "/api/review": "POST - Submit code for review",
-            "/api/status": "GET - Check service status"
+            "/api/status": "GET - Check service status",
+            "/webhook/github": "POST - GitHub webhook receiver"
         }
     }
     
@@ -249,9 +252,6 @@ async def handle_review(request, env):
         return create_error_response(f"Error processing review request: {str(e)}", 500)
 
 
-import hmac
-import hashlib
-
 
 def verify_signature(payload_body: str, signature_header: str, secret: str) -> bool:
     """Verify GitHub webhook HMAC-SHA256 signature using constant-time comparison."""
@@ -272,8 +272,16 @@ async def handle_github_webhook(request, env):
 
     Requires GITHUB_WEBHOOK_SECRET set via: wrangler secret put GITHUB_WEBHOOK_SECRET
     """
-    # Read body first for signature validation
+    # Read body first
     body = await request.text()
+
+    # Guard against empty body BEFORE signature check
+    if not body:
+        return create_error_response("Empty webhook payload", 400)
+
+    # Enforce size limit
+    if len(body) > MAX_BODY_SIZE:
+        return create_error_response("Webhook payload too large", 413)
 
     # Validate HMAC-SHA256 signature — fail closed if secret is not configured
     webhook_secret = getattr(env, 'GITHUB_WEBHOOK_SECRET', None)
@@ -286,9 +294,6 @@ async def handle_github_webhook(request, env):
     # Parse event type
     event_type = request.headers.get('X-GitHub-Event', '')
     delivery_id = request.headers.get('X-GitHub-Delivery', '')
-
-    if not body:
-        return create_error_response("Empty webhook payload", 400)
 
     try:
         payload = json.loads(body)
