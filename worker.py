@@ -275,12 +275,13 @@ async def handle_github_webhook(request, env):
     # Read body first for signature validation
     body = await request.text()
 
-    # Validate HMAC-SHA256 signature
+    # Validate HMAC-SHA256 signature — fail closed if secret is not configured
     webhook_secret = getattr(env, 'GITHUB_WEBHOOK_SECRET', None)
-    if webhook_secret:
-        signature = request.headers.get('X-Hub-Signature-256', '')
-        if not verify_signature(body, signature, webhook_secret):
-            return create_error_response("Invalid webhook signature", 401)
+    if not webhook_secret:
+        return create_error_response("Webhook secret not configured", 500)
+    signature = request.headers.get('X-Hub-Signature-256', '')
+    if not verify_signature(body, signature, webhook_secret):
+        return create_error_response("Invalid webhook signature", 401)
 
     # Parse event type
     event_type = request.headers.get('X-GitHub-Event', '')
