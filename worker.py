@@ -238,7 +238,7 @@ async def handle_review(request, env):
             'Respond ONLY with a valid JSON object (no markdown fences) in exactly this shape: '
             '{"status": "ok", "analysis": {"summary": "brief summary", '
             '"security_issues": [], "quality_issues": [], "suggestions": []}, '
-            '"metadata": {"language": "python", "model": "gemini-2.0-flash"}}'
+            f'"metadata": {{"language": "{language}", "model": "gemini-2.0-flash"}}}}'
 
         )
 
