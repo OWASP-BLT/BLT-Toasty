@@ -162,16 +162,25 @@ async def handle_review(request, env):
     Handle code review requests using Gemini API directly from Cloudflare Worker.
     No Django backend required — runs entirely at the edge.
 
+    Requires GEMINI_API_KEY and WORKER_SECRET secrets set via wrangler secret put.
+
     Args:
         request: The incoming HTTP request
-        env: Environment variables and bindings (requires GEMINI_API_KEY secret)
+        env: Environment variables and bindings
 
     Returns:
         Response: AI-generated code review results
     """
     try:
+        # Auth gate — require WORKER_SECRET header
+        worker_secret = getattr(env, "WORKER_SECRET", None)
+        if worker_secret:
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer ") or auth_header[7:] != worker_secret:
+                return create_error_response("Unauthorized", 401)
+
         # Check Content-Length header if present
-        content_length_header = request.headers.get('Content-Length')
+        content_length_header = request.headers.get("Content-Length")
         if content_length_header:
             try:
                 content_length = int(content_length_header)
@@ -199,8 +208,16 @@ async def handle_review(request, env):
         except json.JSONDecodeError:
             return create_error_response("Invalid JSON in request body", 400)
 
+        # Shape check — must be a JSON object
+        if not isinstance(data, dict):
+            return create_error_response(
+                "Request body must be a JSON object",
+                400
+            )
+
         code = data.get("code")
         language = data.get("language", "unknown")
+        context = data.get("context", "")
 
         if not isinstance(code, str) or not code.strip():
             return create_error_response("Missing or empty field: 'code'", 400)
@@ -208,70 +225,69 @@ async def handle_review(request, env):
         # Get Gemini API key from Worker secrets
         gemini_api_key = getattr(env, "GEMINI_API_KEY", None)
         if not gemini_api_key:
-            return create_error_response("Gemini API key not configured", 500)
+            return create_error_response("AI service not configured", 500)
 
-        # Build prompt for code review
-        prompt = f"""You are an expert code reviewer. Review the following {language} code and provide:
-1. A brief summary of what the code does
-2. Security issues (if any)
-3. Code quality issues (if any)
-4. Specific improvement suggestions
+        # Build prompt — close code fence before JSON instructions
+        prompt = (
+            f"You are an expert code reviewer. Review the following {language} code.\n"
+            f"Context: {context}\n\n"
+            f"Code to review:\n"
+            f"```{language}\n"
+            f"{code}\n"
+            f"```\n\n"
+            "Respond ONLY with a JSON object (no markdown fences) in this exact shape: "
+            "{status: ok, analysis: {summary: ..., security_issues: [], "
+            "quality_issues: [], suggestions: []}, "
+            "metadata: {language: <lang>, model: gemini-2.0-flash}}"
+        )
 
-Code to review:
-```{language}
-{code}
-Respond in JSON format:
-{{
-"summary": "Brief description of what the code does",
-"security_issues": ["list of security issues"],
-"quality_issues": ["list of quality issues"],
-"suggestions": ["list of improvement suggestions"],
-"overall_rating": "good|fair|poor"
-}}"""
-# Call Gemini API directly from Cloudflare Worker
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
+        gemini_url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.0-flash:generateContent?key={gemini_api_key}"
+        )
 
-    gemini_headers = Headers.new()
-    gemini_headers.set("Content-Type", "application/json")
+        gemini_headers = Headers.new()
+        gemini_headers.set("Content-Type", "application/json")
 
-    gemini_payload = json.dumps({
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 1024,
-            "responseMimeType": "application/json"
-        }
-    })
+        gemini_payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 1024
+            }
+        })
 
-    gemini_response = await js_fetch(
-        gemini_url,
-        method="POST",
-        body=gemini_payload,
-        headers=gemini_headers
-    )
+        gemini_response = await js_fetch(
+            gemini_url,
+            method="POST",
+            body=gemini_payload,
+            headers=gemini_headers
+        )
 
-    if not gemini_response.ok:
-        return create_error_response("Failed to get review from AI service", 502)
+        if not gemini_response.ok:
+            return create_error_response("Failed to get review from AI service", 502)
 
-    gemini_text = await gemini_response.text()
-    try:
-        gemini_data = json.loads(gemini_text)
-        # Extract text from Gemini response structure
-        review_text = gemini_data["candidates"][0]["content"]["parts"][0]["text"]
-        review = json.loads(review_text)
-    except (json.JSONDecodeError, KeyError, IndexError):
-        return create_error_response("Failed to parse AI response", 502)
+        gemini_text = await gemini_response.text()
 
-    return create_json_response({
-        "success": True,
-        "review": review,
-        "model": "gemini-2.0-flash"
-    }, 200)
+        try:
+            gemini_data = json.loads(gemini_text)
+            review_text = gemini_data["candidates"][0]["content"]["parts"][0]["text"]
+            review = json.loads(review_text)
+        except (json.JSONDecodeError, KeyError, IndexError):
+            return create_error_response("Failed to parse AI response", 502)
 
-except Exception:
-    return create_error_response("Error processing review request", 500)
+        # Normalise to stable contract: status / analysis / metadata
+        return create_json_response({
+            "status": review.get("status", "ok"),
+            "analysis": review.get("analysis", review),
+            "metadata": review.get("metadata", {
+                "language": language,
+                "model": "gemini-2.0-flash"
+            })
+        }, 200)
+
+    except Exception:
+        return create_error_response("Error processing review request", 500)
 
 
 def handle_status(request):
