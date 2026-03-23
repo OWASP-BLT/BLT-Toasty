@@ -5,7 +5,7 @@ This worker handles API requests for the Toasty AI code review service.
 It provides endpoints for code analysis, health checks, and status monitoring.
 """
 
-from js import Response, Headers
+from js import Response, Headers, fetch as js_fetch
 import json
 
 # Maximum request body size in bytes (1MB)
@@ -159,14 +159,15 @@ def handle_health(request):
 
 async def handle_review(request, env):
     """
-    Handle code review requests.
-    
+    Handle code review requests using Gemini API directly from Cloudflare Worker.
+    No Django backend required — runs entirely at the edge.
+
     Args:
         request: The incoming HTTP request
-        env: Environment variables and bindings
-        
+        env: Environment variables and bindings (requires GEMINI_API_KEY secret)
+
     Returns:
-        Response: Code review results
+        Response: AI-generated code review results
     """
     try:
         # Check Content-Length header if present
@@ -180,68 +181,97 @@ async def handle_review(request, env):
                         413
                     )
             except ValueError:
-                pass  # Invalid Content-Length, will be caught during reading
-        
-        # Parse request body with size limit
+                pass
+
         body = await request.text()
-        
-        if len(body) > MAX_BODY_SIZE:
+
+        if len(body.encode("utf-8")) > MAX_BODY_SIZE:
             return create_error_response(
                 f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes",
                 413
             )
-        
+
         if not body:
             return create_error_response("Request body is required", 400)
-        
+
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
             return create_error_response("Invalid JSON in request body", 400)
-        
-        # Validate required fields
-        if 'code' not in data:
-            return create_error_response("Missing required field: 'code'", 400)
-        
-        code = data.get('code')
-        
-        # Validate that code is a non-empty string
-        if not isinstance(code, str):
-            return create_error_response("Field 'code' must be a string", 400)
-        
-        if not code or not code.strip():
-            return create_error_response("Field 'code' cannot be empty", 400)
-        
-        language = data.get('language', 'unknown')
-        context = data.get('context', '')
-        
-        # Placeholder for actual AI review logic
-        # In production, this would call AI services, perform static analysis, etc.
-        review_result = {
-            "status": "success",
-            "analysis": {
-                "language": language,
-                "lines_of_code": len(code.split('\n')),
-                "issues": [],
-                "suggestions": [
-                    {
-                        "type": "info",
-                        "message": "Code review placeholder - integration with AI services pending",
-                        "line": 0
-                    }
-                ],
-                "summary": "Review completed successfully"
-            },
-            "metadata": {
-                "processed_at": None,  # Would use datetime in production
-                "worker_version": "1.0.0"
-            }
+
+        code = data.get("code")
+        language = data.get("language", "unknown")
+
+        if not isinstance(code, str) or not code.strip():
+            return create_error_response("Missing or empty field: 'code'", 400)
+
+        # Get Gemini API key from Worker secrets
+        gemini_api_key = getattr(env, "GEMINI_API_KEY", None)
+        if not gemini_api_key:
+            return create_error_response("Gemini API key not configured", 500)
+
+        # Build prompt for code review
+        prompt = f"""You are an expert code reviewer. Review the following {language} code and provide:
+1. A brief summary of what the code does
+2. Security issues (if any)
+3. Code quality issues (if any)
+4. Specific improvement suggestions
+
+Code to review:
+```{language}
+{code}
+Respond in JSON format:
+{{
+"summary": "Brief description of what the code does",
+"security_issues": ["list of security issues"],
+"quality_issues": ["list of quality issues"],
+"suggestions": ["list of improvement suggestions"],
+"overall_rating": "good|fair|poor"
+}}"""
+# Call Gemini API directly from Cloudflare Worker
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
+
+    gemini_headers = Headers.new()
+    gemini_headers.set("Content-Type", "application/json")
+
+    gemini_payload = json.dumps({
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 1024,
+            "responseMimeType": "application/json"
         }
-        
-        return create_json_response(review_result, 200)
-        
-    except Exception as e:
-        return create_error_response(f"Error processing review request: {str(e)}", 500)
+    })
+
+    gemini_response = await js_fetch(
+        gemini_url,
+        method="POST",
+        body=gemini_payload,
+        headers=gemini_headers
+    )
+
+    if not gemini_response.ok:
+        return create_error_response("Failed to get review from AI service", 502)
+
+    gemini_text = await gemini_response.text()
+    try:
+        gemini_data = json.loads(gemini_text)
+        # Extract text from Gemini response structure
+        review_text = gemini_data["candidates"][0]["content"]["parts"][0]["text"]
+        review = json.loads(review_text)
+    except (json.JSONDecodeError, KeyError, IndexError):
+        return create_error_response("Failed to parse AI response", 502)
+
+    return create_json_response({
+        "success": True,
+        "review": review,
+        "model": "gemini-2.0-flash"
+    }, 200)
+
+except Exception:
+    return create_error_response("Error processing review request", 500)
 
 
 def handle_status(request):
