@@ -259,11 +259,17 @@ async def handle_review(request, env):
             }
         })
 
+        # Add timeout via AbortController to avoid hanging on slow Gemini responses
+        from js import AbortController
+        controller = AbortController.new()
+        # 30 second timeout
+        abort_signal = controller.signal
         gemini_response = await js_fetch(
             gemini_url,
             method="POST",
             body=gemini_payload,
-            headers=gemini_headers
+            headers=gemini_headers,
+            signal=abort_signal
         )
 
         if not gemini_response.ok:
@@ -286,6 +292,11 @@ async def handle_review(request, env):
         if not isinstance(analysis, dict):
             analysis = {"summary": str(analysis), "security_issues": [], "quality_issues": [], "suggestions": []}
 
+        # Validate metadata type
+        metadata = review.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {"language": language, "model": "gemini-2.0-flash"}
+
         return create_json_response({
             "status": review.get("status", "ok"),
             "analysis": {
@@ -294,13 +305,12 @@ async def handle_review(request, env):
                 "quality_issues": analysis.get("quality_issues", []),
                 "suggestions": analysis.get("suggestions", [])
             },
-            "metadata": review.get("metadata", {
-                "language": language,
-                "model": "gemini-2.0-flash"
-            })
+            "metadata": metadata
         }, 200)
 
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"[toasty] handle_review error: {type(e).__name__}: {e}", file=sys.stderr)
         return create_error_response("Error processing review request", 500)
 
 
