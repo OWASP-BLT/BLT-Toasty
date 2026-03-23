@@ -244,17 +244,18 @@ async def handle_review(request, env):
 
         gemini_url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-2.0-flash:generateContent?key={gemini_api_key}"
+            "gemini-2.0-flash:generateContent"
         )
 
         gemini_headers = Headers.new()
         gemini_headers.set("Content-Type", "application/json")
+        gemini_headers.set("x-goog-api-key", gemini_api_key)
 
         gemini_payload = json.dumps({
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.3,
-                "maxOutputTokens": 1024
+                "maxOutputTokens": 2048
             }
         })
 

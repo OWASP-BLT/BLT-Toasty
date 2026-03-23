@@ -49,7 +49,7 @@ name = "toasty-backend-dev"
 # bucket_name = "toasty-files"
 
 # Environment variables (secrets should be set via wrangler secret put)
-# BACKEND_URL — URL of the Django backend (e.g. https://toasty.example.com)
+
 [vars]
 ENVIRONMENT = "development"
 LOG_LEVEL = "info"
