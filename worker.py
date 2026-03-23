@@ -107,7 +107,7 @@ def handle_options(request):
     headers = Headers.new()
     headers.set("Access-Control-Allow-Origin", "*")
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
-    headers.set("Access-Control-Allow-Headers", "Content-Type")
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
     headers.set("Access-Control-Max-Age", "86400")
     
     return Response.new("", status=204, headers=headers)
@@ -235,10 +235,11 @@ async def handle_review(request, env):
             f"```{language}\n"
             f"{code}\n"
             f"```\n\n"
-            "Respond ONLY with a JSON object (no markdown fences) in this exact shape: "
-            "{status: ok, analysis: {summary: ..., security_issues: [], "
-            "quality_issues: [], suggestions: []}, "
-            "metadata: {language: <lang>, model: gemini-2.0-flash}}"
+            'Respond ONLY with a valid JSON object (no markdown fences) in exactly this shape: '
+            '{"status": "ok", "analysis": {"summary": "brief summary", '
+            '"security_issues": [], "quality_issues": [], "suggestions": []}, '
+            '"metadata": {"language": "python", "model": "gemini-2.0-flash"}}'
+
         )
 
         gemini_url = (
@@ -277,9 +278,21 @@ async def handle_review(request, env):
             return create_error_response("Failed to parse AI response", 502)
 
         # Normalise to stable contract: status / analysis / metadata
+        if not isinstance(review, dict):
+            return create_error_response("Unexpected AI response shape", 502)
+
+        analysis = review.get("analysis", review)
+        if not isinstance(analysis, dict):
+            analysis = {"summary": str(analysis), "security_issues": [], "quality_issues": [], "suggestions": []}
+
         return create_json_response({
             "status": review.get("status", "ok"),
-            "analysis": review.get("analysis", review),
+            "analysis": {
+                "summary": analysis.get("summary", ""),
+                "security_issues": analysis.get("security_issues", []),
+                "quality_issues": analysis.get("quality_issues", []),
+                "suggestions": analysis.get("suggestions", [])
+            },
             "metadata": review.get("metadata", {
                 "language": language,
                 "model": "gemini-2.0-flash"
@@ -330,7 +343,7 @@ def create_json_response(data, status_code=200):
     headers.set("Content-Type", "application/json")
     headers.set("Access-Control-Allow-Origin", "*")
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
-    headers.set("Access-Control-Allow-Headers", "Content-Type")
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
     
     return Response.new(
         json.dumps(data),
@@ -375,7 +388,7 @@ def create_method_not_allowed_response(path, allowed_methods):
     headers.set("Content-Type", "application/json")
     headers.set("Access-Control-Allow-Origin", "*")
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
-    headers.set("Access-Control-Allow-Headers", "Content-Type")
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
     headers.set("Allow", ", ".join(allowed_methods))
     
     error_data = {
