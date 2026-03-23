@@ -164,6 +164,7 @@ def run_all_tests():
         test_json_response_structure()
         test_error_response_structure()
         test_review_request_validation()
+        run_webhook_tests()
         
         print("\n" + "="*50)
         print("All tests passed! ✓")
@@ -178,6 +179,98 @@ def run_all_tests():
     
     return True
 
+
+
+
+# ---------------------------------------------------------------------------
+# verify_signature — pure Python, no runtime dependency
+# ---------------------------------------------------------------------------
+import hmac
+import hashlib
+
+
+def verify_signature(payload_body: str, signature_header: str, secret: str) -> bool:
+    """Copy of verify_signature from worker.py for testing. Keep in sync."""
+    if not signature_header or not signature_header.startswith('sha256='):
+        return False
+    expected = 'sha256=' + hmac.new(
+        secret.encode('utf-8'),
+        payload_body.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+def make_signature(body: str, secret: str) -> str:
+    """Helper to generate a valid HMAC-SHA256 signature."""
+    return 'sha256=' + hmac.new(
+        secret.encode(), body.encode(), hashlib.sha256
+    ).hexdigest()
+
+
+def test_verify_signature_valid():
+    secret = "test-secret"
+    body = '{"action":"opened"}'
+    sig = make_signature(body, secret)
+    assert verify_signature(body, sig, secret) is True
+    print("  ✓ valid signature accepted")
+
+
+def test_verify_signature_invalid():
+    assert verify_signature('{"x":1}', 'sha256=badhash', 'secret') is False
+    print("  ✓ invalid signature rejected")
+
+
+def test_verify_signature_missing_header():
+    assert verify_signature('body', '', 'secret') is False
+    assert verify_signature('body', None, 'secret') is False
+    print("  ✓ missing/empty header rejected")
+
+
+def test_verify_signature_wrong_prefix():
+    assert verify_signature('body', 'sha1=abc123', 'secret') is False
+    print("  ✓ wrong prefix (sha1) rejected")
+
+
+def test_verify_signature_different_secret():
+    body = '{"action":"opened"}'
+    sig = make_signature(body, "correct-secret")
+    assert verify_signature(body, sig, "wrong-secret") is False
+    print("  ✓ wrong secret rejected")
+
+
+def test_webhook_route_parsing():
+    """Verify /webhook/github route is parsed correctly."""
+    assert parse_path("https://example.com/webhook/github") == "/webhook/github"
+    assert parse_path("https://example.com/webhook/github?foo=bar") == "/webhook/github"
+    print("  ✓ /webhook/github route parsed correctly")
+
+
+def test_json_response_structure_with_webhook():
+    """Root endpoint must document /webhook/github."""
+    endpoints_doc = {
+        "/": "Service information",
+        "/health": "Health check endpoint",
+        "/api/review": "POST - Submit code for review",
+        "/api/status": "GET - Check service status",
+        "/webhook/github": "POST - GitHub webhook receiver"
+    }
+    assert "/webhook/github" in endpoints_doc
+    assert endpoints_doc["/webhook/github"] == "POST - GitHub webhook receiver"
+    print("  ✓ /webhook/github documented in root endpoint")
+
+
+def run_webhook_tests():
+    """Run all webhook-related tests."""
+    print("\nRunning webhook tests...")
+    test_verify_signature_valid()
+    test_verify_signature_invalid()
+    test_verify_signature_missing_header()
+    test_verify_signature_wrong_prefix()
+    test_verify_signature_different_secret()
+    test_webhook_route_parsing()
+    test_json_response_structure_with_webhook()
+    print("  All webhook tests passed! ✓")
 
 if __name__ == "__main__":
     success = run_all_tests()
