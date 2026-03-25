@@ -331,7 +331,7 @@ def run_webhook_tests():
     test_webhook_ping_pong()
     test_webhook_pr_or_comment_routing()
     test_webhook_non_post_405()
-    print("  All webhook tests passed! ✓")
+    print("  All pure-Python webhook tests passed! ✓ (7 integration scenarios skipped — require runtime harness)")
 
 if __name__ == "__main__":
     success = run_all_tests()
