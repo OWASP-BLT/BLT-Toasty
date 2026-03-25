@@ -7,6 +7,7 @@ It provides endpoints for code analysis, health checks, and status monitoring.
 
 from js import Response, Headers
 import json
+from datetime import datetime, timezone
 
 # Maximum request body size in bytes (1MB)
 MAX_BODY_SIZE = 1024 * 1024
@@ -151,7 +152,7 @@ def handle_health(request):
     health_data = {
         "status": "healthy",
         "service": "toasty-backend",
-        "timestamp": None  # Would use datetime in production
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     return create_json_response(health_data, 200)
@@ -233,7 +234,7 @@ async def handle_review(request, env):
                 "summary": "Review completed successfully"
             },
             "metadata": {
-                "processed_at": None,  # Would use datetime in production
+                "processed_at": datetime.now(timezone.utc).isoformat(),
                 "worker_version": "1.0.0"
             }
         }
