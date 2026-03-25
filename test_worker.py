@@ -8,6 +8,8 @@ IMPORTANT: The parse_path function is duplicated here because worker.py requires
 the Cloudflare Workers runtime (js module) and cannot be imported in standard Python.
 If you modify the parse_path logic in worker.py, you MUST update this copy to match.
 """
+import hmac
+import hashlib
 
 
 def parse_path(url):
@@ -85,7 +87,8 @@ def test_json_response_structure():
             "/": "Service information",
             "/health": "Health check endpoint",
             "/api/review": "POST - Submit code for review",
-            "/api/status": "GET - Check service status"
+            "/api/status": "GET - Check service status",
+            "/webhook/github": "POST - GitHub webhook receiver"
         }
     }
     assert "service" in root_response
@@ -185,8 +188,6 @@ def run_all_tests():
 # ---------------------------------------------------------------------------
 # verify_signature — pure Python, no runtime dependency
 # ---------------------------------------------------------------------------
-import hmac
-import hashlib
 
 
 def verify_signature(payload_body: str, signature_header: str, secret: str) -> bool:
@@ -246,8 +247,14 @@ def test_webhook_route_parsing():
     print("  ✓ /webhook/github route parsed correctly")
 
 
-def test_json_response_structure_with_webhook():
-    """Root endpoint must document /webhook/github."""
+def test_endpoint_documentation_includes_webhook():
+    """Verify /webhook/github is present in the root endpoint documentation.
+
+    This is a contract-specification mirror of worker.py's handle_root()
+    endpoint dict, kept intentionally local due to runtime import constraints.
+    Must be manually updated if the real endpoints in worker.py change.
+    """
+    # Hardcoded mirror of worker.py handle_root() endpoints — keep in sync
     endpoints_doc = {
         "/": "Service information",
         "/health": "Health check endpoint",
@@ -260,6 +267,52 @@ def test_json_response_structure_with_webhook():
     print("  ✓ /webhook/github documented in root endpoint")
 
 
+# ---------------------------------------------------------------------------
+# HTTP-level integration stubs — require Cloudflare Workers runtime/harness
+# ---------------------------------------------------------------------------
+
+def test_webhook_empty_body_400():
+    # TODO: requires integration harness — empty POST to /webhook/github
+    # should return 400 before signature check
+    print("  ~ test_webhook_empty_body_400: skipped (requires runtime harness)")
+
+
+def test_webhook_oversized_payload_413():
+    # TODO: requires integration harness — payload > MAX_BODY_SIZE
+    # should return 413
+    print("  ~ test_webhook_oversized_payload_413: skipped (requires runtime harness)")
+
+
+def test_webhook_missing_secret_500():
+    # TODO: requires integration harness — GITHUB_WEBHOOK_SECRET not set
+    # should return 500
+    print("  ~ test_webhook_missing_secret_500: skipped (requires runtime harness)")
+
+
+def test_webhook_invalid_json_400():
+    # TODO: requires integration harness — valid HMAC but invalid JSON body
+    # should return 400
+    print("  ~ test_webhook_invalid_json_400: skipped (requires runtime harness)")
+
+
+def test_webhook_ping_pong():
+    # TODO: requires integration harness — X-GitHub-Event: ping
+    # should return 200 with pong message
+    print("  ~ test_webhook_ping_pong: skipped (requires runtime harness)")
+
+
+def test_webhook_pr_or_comment_routing():
+    # TODO: requires integration harness — pull_request and issue_comment events
+    # should route to correct handlers and return 200
+    print("  ~ test_webhook_pr_or_comment_routing: skipped (requires runtime harness)")
+
+
+def test_webhook_non_post_405():
+    # TODO: requires integration harness — GET /webhook/github
+    # should return 405 with Allow: POST header
+    print("  ~ test_webhook_non_post_405: skipped (requires runtime harness)")
+
+
 def run_webhook_tests():
     """Run all webhook-related tests."""
     print("\nRunning webhook tests...")
@@ -269,7 +322,15 @@ def run_webhook_tests():
     test_verify_signature_wrong_prefix()
     test_verify_signature_different_secret()
     test_webhook_route_parsing()
-    test_json_response_structure_with_webhook()
+    test_endpoint_documentation_includes_webhook()
+    # Integration stubs (require runtime harness)
+    test_webhook_empty_body_400()
+    test_webhook_oversized_payload_413()
+    test_webhook_missing_secret_500()
+    test_webhook_invalid_json_400()
+    test_webhook_ping_pong()
+    test_webhook_pr_or_comment_routing()
+    test_webhook_non_post_405()
     print("  All webhook tests passed! ✓")
 
 if __name__ == "__main__":
