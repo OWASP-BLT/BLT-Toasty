@@ -7,6 +7,9 @@ It provides endpoints for code analysis, health checks, and status monitoring.
 
 from js import Response, Headers
 import json
+import hmac
+import hashlib
+from datetime import datetime
 
 # Maximum request body size in bytes (1MB)
 MAX_BODY_SIZE = 1024 * 1024
@@ -90,6 +93,11 @@ async def on_fetch(request, env):
             return handle_status(request)
         else:
             return create_method_not_allowed_response(path, ['GET', 'HEAD'])
+    elif path == '/webhook/github':
+        if method == 'POST':
+            return await handle_github_webhook(request, env)
+        else:
+            return create_method_not_allowed_response(path, ['POST'])
     else:
         return create_error_response(f"Not Found: {path}", 404)
 
@@ -131,7 +139,8 @@ def handle_root(request):
             "/": "Service information",
             "/health": "Health check endpoint",
             "/api/review": "POST - Submit code for review",
-            "/api/status": "GET - Check service status"
+            "/api/status": "GET - Check service status",
+            "/webhook/github": "POST - GitHub App webhook endpoint"
         }
     }
     
@@ -242,6 +251,165 @@ async def handle_review(request, env):
         
     except Exception as e:
         return create_error_response(f"Error processing review request: {str(e)}", 500)
+
+
+async def handle_github_webhook(request, env):
+    """
+    Handle incoming GitHub webhooks.
+    
+    Args:
+        request: The incoming HTTP request
+        env: Environment variables and bindings
+        
+    Returns:
+        Response: Webhook processing status
+    """
+    try:
+        # 1. Get and Validate Headers
+        signature = request.headers.get("X-Hub-Signature-256")
+        event_type = request.headers.get("X-GitHub-Event")
+        delivery_id = request.headers.get("X-GitHub-Delivery")
+        
+        if not signature or not event_type or not delivery_id:
+            return create_error_response("Missing required GitHub headers (Signature, Event, or Delivery)", 400)
+            
+        # 1.1. Body Size Guard (Professional Practice)
+        content_length = request.headers.get("Content-Length")
+        if content_length and int(content_length) > MAX_BODY_SIZE:
+            return create_error_response("Payload too large", 413)
+
+        # 2. Extract Webhook Secret
+        # Professional practice: Explicitly check for "development" before fallback
+        environment = getattr(env, "ENVIRONMENT", None)
+        webhook_secret = getattr(env, "GITHUB_WEBHOOK_SECRET", None)
+            
+        if not webhook_secret:
+            # Fallback for development if secret not set
+            if environment == "development":
+                print("Warning: GITHUB_WEBHOOK_SECRET not set, skipping verification in development")
+            else:
+                return create_error_response("Webhook secret not configured", 500)
+
+        # 3. Read payload as raw bytes for signature verification
+        # Optimization: Rely on Pyodide's automatic JsProxy -> memoryview conversion
+        payload_buffer = await request.arrayBuffer()
+        payload_bytes = bytes(payload_buffer)
+        
+        # 4. Verify signature (if secret configured)
+        if webhook_secret:
+            if not verify_github_signature(signature, payload_bytes, webhook_secret):
+                return create_error_response("Invalid webhook signature", 401)
+
+        # 4.1. Webhook Replay Protection (Idempotency) 
+        # Verified ONLY after signature validation for security.
+        kv = getattr(env, "TOASTY_KV", None)
+        if kv:
+            is_duplicate = await check_is_duplicate_webhook(delivery_id, kv)
+            if is_duplicate:
+                print(f"Duplicate webhook detected: {delivery_id}. Skipping.")
+                return create_json_response({
+                    "status": "ignored",
+                    "message": "Duplicate delivery ID",
+                    "delivery_id": delivery_id
+                }, 200)
+        else:
+            # Fail open for availability if KV is misconfigured
+            if environment == "development":
+                print("Warning: TOASTY_KV binding not found. Replay protection disabled.")
+        
+        # 5. Parse JSON payload
+        try:
+            payload = json.loads(payload_bytes.decode('utf-8'))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return create_error_response("Invalid JSON or encoding in payload", 400)
+            
+        # 6. Route by event type
+        if event_type == "ping":
+            return create_json_response({"message": "pong", "zen": payload.get("zen")}, 200)
+            
+        elif event_type == "pull_request":
+            action = payload.get("action")
+            pr_number = payload.get("number")
+            repo_name = payload.get("repository", {}).get("full_name")
+            
+            print(f"Received PR event: {action} for {repo_name}#{pr_number}")
+            
+            # TODO: Phase 2.4 - Fetch PR diff and trigger AI review
+            return create_json_response({
+                "status": "accepted",
+                "message": f"PR {action} event received for {repo_name}#{pr_number}",
+                "delivery_id": delivery_id
+            }, 202)
+            
+        elif event_type == "issue_comment":
+            action = payload.get("action")
+            issue_number = payload.get("issue", {}).get("number")
+            comment_body = payload.get("comment", {}).get("body", "")
+            
+            print(f"Received Issue Comment event: {action} on #{issue_number}")
+            
+            # Check if bot was mentioned
+            if "@toasty-bot" in comment_body.lower():
+                return create_json_response({
+                    "status": "accepted",
+                    "message": "Bot mention detected",
+                    "delivery_id": delivery_id
+                }, 202)
+                
+            return create_json_response({"status": "ignored", "reason": "No bot mention"}, 200)
+            
+        else:
+            return create_json_response({
+                "status": "ignored", 
+                "message": f"Unsupported event type: {event_type}"
+            }, 200)
+            
+    except (ValueError, KeyError) as e:
+        return create_error_response(f"Malformed webhook data: {str(e)}", 400)
+    except Exception as e:
+        print(f"Error processing webhook: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return create_error_response("Internal server error during webhook processing", 500)
+
+
+async def check_is_duplicate_webhook(delivery_id, kv):
+    """
+    Check if this webhook delivery ID has been seen before using KV.
+    
+    Professional implementation:
+    - Fails open (returns False) if KV errors occur to ensure availability.
+    - Uses a 24-hour TTL for replay protection state.
+    """
+    try:
+        key = f"webhook_delivery:{delivery_id}"
+        existing = await kv.get(key)
+        
+        if existing:
+            return True
+            
+        # Store for 24 hours (86400 seconds)
+        await kv.put(key, "1", {"expirationTtl": 86400})
+        return False
+    except Exception as e:
+        print(f"KV Error in replay protection: {str(e)}")
+        return False
+
+
+def verify_github_signature(signature_header, payload_bytes, secret):
+    """
+    Verify GitHub HMAC SHA256 signature.
+    """
+    if not signature_header.startswith("sha256="):
+        return False
+        
+    expected_signature = signature_header[7:]
+    
+    # Calculate HMAC
+    mac = hmac.new(secret.encode(), payload_bytes, hashlib.sha256)
+    actual_signature = mac.hexdigest()
+    
+    return hmac.compare_digest(actual_signature, expected_signature)
 
 
 def handle_status(request):

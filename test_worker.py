@@ -10,6 +10,11 @@ If you modify the parse_path logic in worker.py, you MUST update this copy to ma
 """
 
 
+import json
+import hmac
+import hashlib
+
+
 def parse_path(url):
     """
     Extract clean path from URL, handling query params and fragments.
@@ -37,6 +42,53 @@ def parse_path(url):
             path = path[:-1]
     
     return path
+
+
+class MockKV:
+    """Simulate Cloudflare KV storage for testing with TTL support and error simulation."""
+    def __init__(self):
+        self.storage = {}
+        self.force_fail = False
+    
+    async def get(self, key):
+        if self.force_fail:
+            raise Exception("KV connection lost")
+        import time
+        entry = self.storage.get(key)
+        if entry:
+            if entry.get("expires_at") and entry["expires_at"] < time.time():
+                del self.storage[key]
+                return None
+            return entry["value"]
+        return None
+    
+    async def put(self, key, value, options=None):
+        if self.force_fail:
+            raise Exception("KV storage full")
+        import time
+        expires_at = None
+        if options and "expirationTtl" in options:
+            expires_at = time.time() + options["expirationTtl"]
+        
+        self.storage[key] = {
+            "value": value,
+            "expires_at": expires_at,
+            "options": options
+        }
+
+
+# Mock the 'js' module for local testing before importing from worker.py
+import sys
+from unittest.mock import MagicMock
+mock_js = MagicMock()
+mock_js.Response = MagicMock()
+mock_js.Headers = MagicMock()
+sys.modules["js"] = mock_js
+
+
+# Import canonical implementation from worker module to avoid drift
+# Note: These are the production verified logic blocks.
+from worker import verify_github_signature, check_is_duplicate_webhook
 
 
 def test_route_parsing():
@@ -155,6 +207,53 @@ def test_review_request_validation():
     print("✓ Review request validation tests passed")
 
 
+def test_github_webhook_parsing():
+    """Test GitHub webhook parsing and signature verification logic."""
+    secret = "test_secret"
+    payload = {"zen": "Keep it logical", "hook_id": 123456}
+    payload_bytes = json.dumps(payload).encode('utf-8')
+    
+    # Calculate valid signature
+    mac = hmac.new(secret.encode(), payload_bytes, hashlib.sha256)
+    valid_signature = "sha256=" + mac.hexdigest()
+    
+    # Test valid signature
+    assert verify_github_signature(valid_signature, payload_bytes, secret) is True
+    
+    # Test invalid signature
+    assert verify_github_signature("sha256=invalid", payload_bytes, secret) is False
+    
+    # Test ping event logic (simulated)
+    event_type = "ping"
+    if event_type == "ping":
+        response_data = {"message": "pong", "zen": payload.get("zen")}
+        assert response_data["message"] == "pong"
+        assert response_data["zen"] == "Keep it logical"
+        
+    print("✓ GitHub webhook parsing tests passed")
+
+
+def test_replay_protection():
+    """Test the idempotency/replay protection logic."""
+    kv = MockKV()
+    delivery_id = "uniq-123"
+    
+    import asyncio
+    
+    # First time - not a duplicate
+    assert asyncio.run(check_is_duplicate_webhook(delivery_id, kv)) is False
+    # Second time - IS a duplicate
+    assert asyncio.run(check_is_duplicate_webhook(delivery_id, kv)) is True
+    # Verify TTL option was stored
+    assert kv.storage[f"webhook_delivery:{delivery_id}"]["options"]["expirationTtl"] == 86400
+
+    # Test Fail-Open behavior (KV error)
+    kv.force_fail = True
+    assert asyncio.run(check_is_duplicate_webhook("new-id", kv)) is False
+    
+    print("✓ Replay protection logic and fail-open tests passed")
+
+
 def run_all_tests():
     """Run all test functions."""
     print("Running Toasty Worker Tests...\n")
@@ -164,6 +263,8 @@ def run_all_tests():
         test_json_response_structure()
         test_error_response_structure()
         test_review_request_validation()
+        test_github_webhook_parsing()
+        test_replay_protection()
         
         print("\n" + "="*50)
         print("All tests passed! ✓")

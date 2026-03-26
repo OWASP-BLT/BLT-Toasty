@@ -48,7 +48,6 @@ name = "toasty-backend-dev"
 # binding = "TOASTY_BUCKET"
 # bucket_name = "toasty-files"
 
-# Environment variables (secrets should be set via wrangler secret put)
-[vars]
-ENVIRONMENT = "development"
-LOG_LEVEL = "info"
+# ENVIRONMENT = "development"
+# LOG_LEVEL = "info"
+# GITHUB_WEBHOOK_SECRET should be set via 'wrangler secret put'
