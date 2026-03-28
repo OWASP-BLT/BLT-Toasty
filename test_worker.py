@@ -124,7 +124,7 @@ def test_json_response_structure():
     assert review_response["status"] == "success"
     assert "analysis" in review_response
     assert "metadata" in review_response
-    # Verify review timestamp format (NOW this works because review_response exists!)
+    # Verify review timestamp format
     assert ISO_8601_RE.match(review_response["metadata"]["processed_at"]), "Review processed_at format invalid"
     
     print("✓ All JSON response structure tests passed")
