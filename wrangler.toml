@@ -52,3 +52,8 @@ name = "toasty-backend-dev"
 [vars]
 ENVIRONMENT = "development"
 LOG_LEVEL = "info"
+
+# Secrets — set via wrangler secret put:
+# wrangler secret put GEMINI_API_KEY
+# wrangler secret put GITHUB_TOKEN
+# wrangler secret put GITHUB_WEBHOOK_SECRET
