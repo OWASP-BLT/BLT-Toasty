@@ -383,3 +383,40 @@ That:
 * Minimizes latency and infrastructure overhead
 
 
+
+---
+
+# Getting Started
+
+This section covers the current working state of the Worker (`worker.py`).
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) (for Wrangler)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
+
+```bash
+npm install -g wrangler
+wrangler login
+Configure Secrets
+Set required secrets via Wrangler before deploying or running locally:
+wrangler secret put GEMINI_API_KEY
+wrangler secret put WORKER_SECRET
+GEMINI_API_KEY — your Google Gemini API key
+WORKER_SECRET — a secret token; all requests to /api/review must include Authorization: Bearer <WORKER_SECRET>
+Run Locally
+wrangler dev
+Worker will be available at http://localhost:8787.
+Test the /api/review Endpoint
+curl -X POST http://localhost:8787/api/review \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_WORKER_SECRET>" \
+  -d '{
+    "code": "def add(a, b): return a + b",
+    "language": "python",
+    "context": "Simple addition function"
+  }'
+Deploy to Cloudflare
+wrangler deploy
+Health Check
+curl http://localhost:8787/health
