@@ -7,6 +7,7 @@ It provides endpoints for code analysis, health checks, and status monitoring.
 
 from js import Response, Headers, fetch as js_fetch, AbortSignal
 import sys
+import re
 import json
 
 # Maximum request body size in bytes (1MB)
@@ -221,6 +222,8 @@ async def handle_review(request, env):
 
         code = data.get("code")
         language = data.get("language", "unknown")
+        # Sanitize language: strip whitespace and allow only safe characters
+        language = re.sub(r"[^a-zA-Z0-9+#._-]", "", str(language).strip()) or "unknown"
         context = data.get("context", "")
 
         if not isinstance(code, str) or not code.strip():
