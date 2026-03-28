@@ -386,6 +386,8 @@ That:
 
 ---
 
+---
+
 # Getting Started
 
 This section covers the current working state of the Worker (`worker.py`).
@@ -398,25 +400,49 @@ This section covers the current working state of the Worker (`worker.py`).
 ```bash
 npm install -g wrangler
 wrangler login
-Configure Secrets
+```
+
+## Configure Secrets
+
 Set required secrets via Wrangler before deploying or running locally:
+
+```bash
 wrangler secret put GEMINI_API_KEY
 wrangler secret put WORKER_SECRET
-GEMINI_API_KEY — your Google Gemini API key
-WORKER_SECRET — a secret token; all requests to /api/review must include Authorization: Bearer <WORKER_SECRET>
-Run Locally
+```
+
+- **GEMINI_API_KEY** — your Google Gemini API key
+- **WORKER_SECRET** — a secret token; all requests to `/api/review` must include `Authorization: Bearer <WORKER_SECRET>`
+
+## Run Locally
+
+```bash
 wrangler dev
-Worker will be available at http://localhost:8787.
-Test the /api/review Endpoint
-curl -X POST http://localhost:8787/api/review \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your_WORKER_SECRET>" \
+```
+
+Worker will be available at `http://localhost:8787`.
+
+## Test the `/api/review` Endpoint
+
+```bash
+curl -X POST http://localhost:8787/api/review \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <your_WORKER_SECRET>" \\
   -d '{
     "code": "def add(a, b): return a + b",
     "language": "python",
     "context": "Simple addition function"
   }'
-Deploy to Cloudflare
+```
+
+## Deploy to Cloudflare
+
+```bash
 wrangler deploy
-Health Check
+```
+
+## Health Check
+
+```bash
 curl http://localhost:8787/health
+```
