@@ -233,7 +233,7 @@ async def handle_review(request, env):
                 "summary": "Review completed successfully"
             },
             "metadata": {
-                "processed_at": datetime.now().isoformat(),  # Would use datetime in production
+                "processed_at": datetime.now(timezone.utc).isoformat(),  # Would use datetime in production
                 "worker_version": "1.0.0"
             }
         }

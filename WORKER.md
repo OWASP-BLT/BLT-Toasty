@@ -75,7 +75,7 @@ Submit code for AI-powered review and analysis.
     "processed_at": "2026-03-28T14:30:00Z",
     "worker_version": "1.0.0"
   }
-}
+  }
 ```
 
 ### GET /api/status
