@@ -205,7 +205,7 @@ def verify_signature(payload_body: str, signature_header: str, secret: str) -> b
 def make_signature(body: str, secret: str) -> str:
     """Helper to generate a valid HMAC-SHA256 signature."""
     return 'sha256=' + hmac.new(
-        secret.encode(), body.encode(), hashlib.sha256
+        secret.encode('utf-8'), body.encode('utf-8'), hashlib.sha256
     ).hexdigest()
 
 
