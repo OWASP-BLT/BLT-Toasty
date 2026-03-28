@@ -271,46 +271,46 @@ def test_endpoint_documentation_includes_webhook():
 # HTTP-level integration stubs — require Cloudflare Workers runtime/harness
 # ---------------------------------------------------------------------------
 
-def test_webhook_empty_body_400():
+def webhook_stub_empty_body_400():
     # TODO: requires integration harness — empty POST to /webhook/github
     # should return 400 before signature check
-    print("  ~ test_webhook_empty_body_400: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_empty_body_400: skipped (requires runtime harness)")
 
 
-def test_webhook_oversized_payload_413():
+def webhook_stub_oversized_payload_413():
     # TODO: requires integration harness — payload > MAX_BODY_SIZE
     # should return 413
-    print("  ~ test_webhook_oversized_payload_413: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_oversized_payload_413: skipped (requires runtime harness)")
 
 
-def test_webhook_missing_secret_500():
+def webhook_stub_missing_secret_500():
     # TODO: requires integration harness — GITHUB_WEBHOOK_SECRET not set
     # should return 500
-    print("  ~ test_webhook_missing_secret_500: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_missing_secret_500: skipped (requires runtime harness)")
 
 
-def test_webhook_invalid_json_400():
+def webhook_stub_invalid_json_400():
     # TODO: requires integration harness — valid HMAC but invalid JSON body
     # should return 400
-    print("  ~ test_webhook_invalid_json_400: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_invalid_json_400: skipped (requires runtime harness)")
 
 
-def test_webhook_ping_pong():
+def webhook_stub_ping_pong():
     # TODO: requires integration harness — X-GitHub-Event: ping
     # should return 200 with pong message
-    print("  ~ test_webhook_ping_pong: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_ping_pong: skipped (requires runtime harness)")
 
 
-def test_webhook_pr_or_comment_routing():
+def webhook_stub_pr_or_comment_routing():
     # TODO: requires integration harness — pull_request and issue_comment events
     # should route to correct handlers and return 200
-    print("  ~ test_webhook_pr_or_comment_routing: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_pr_or_comment_routing: skipped (requires runtime harness)")
 
 
-def test_webhook_non_post_405():
+def webhook_stub_non_post_405():
     # TODO: requires integration harness — GET /webhook/github
     # should return 405 with Allow: POST header
-    print("  ~ test_webhook_non_post_405: skipped (requires runtime harness)")
+    print("  ~ webhook_stub_non_post_405: skipped (requires runtime harness)")
 
 
 def run_webhook_tests():
@@ -324,13 +324,13 @@ def run_webhook_tests():
     test_webhook_route_parsing()
     test_endpoint_documentation_includes_webhook()
     # Integration stubs (require runtime harness)
-    test_webhook_empty_body_400()
-    test_webhook_oversized_payload_413()
-    test_webhook_missing_secret_500()
-    test_webhook_invalid_json_400()
-    test_webhook_ping_pong()
-    test_webhook_pr_or_comment_routing()
-    test_webhook_non_post_405()
+    webhook_stub_empty_body_400()
+    webhook_stub_oversized_payload_413()
+    webhook_stub_missing_secret_500()
+    webhook_stub_invalid_json_400()
+    webhook_stub_ping_pong()
+    webhook_stub_pr_or_comment_routing()
+    webhook_stub_non_post_405()
     print("  All pure-Python webhook tests passed! ✓ (7 integration scenarios skipped — require runtime harness)")
 
 if __name__ == "__main__":
