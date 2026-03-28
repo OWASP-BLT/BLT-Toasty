@@ -5,7 +5,8 @@ This worker handles API requests for the Toasty AI code review service.
 It provides endpoints for code analysis, health checks, and status monitoring.
 """
 
-from js import Response, Headers, fetch as js_fetch
+from js import Response, Headers, fetch as js_fetch, AbortSignal
+import sys
 import json
 
 # Maximum request body size in bytes (1MB)
@@ -241,7 +242,7 @@ async def handle_review(request, env):
             'Respond ONLY with a valid JSON object (no markdown fences) in exactly this shape: '
             '{"status": "ok", "analysis": {"summary": "brief summary", '
             '"security_issues": [], "quality_issues": [], "suggestions": []}, '
-            f'"metadata": {{"language": "{language}", "model": "gemini-2.0-flash"}}}}'
+            f'"metadata": {{"language": {json.dumps(language)}, "model": "gemini-2.0-flash"}}}}'
         )
 
         gemini_url = (
@@ -262,7 +263,6 @@ async def handle_review(request, env):
         })
 
         # Wrap js_fetch separately to catch timeout and network errors
-        from js import AbortSignal
         try:
             gemini_response = await js_fetch(
                 gemini_url,
@@ -272,7 +272,6 @@ async def handle_review(request, env):
                 signal=AbortSignal.timeout(30000)
             )
         except Exception as e:
-            import sys
             print(f"[toasty] Gemini fetch error: {type(e).__name__}: {e}", file=sys.stderr)
             return create_error_response("Service temporarily unavailable", 504)
 
@@ -346,7 +345,6 @@ async def handle_review(request, env):
         }, 200)
 
     except Exception as e:
-        import sys
         print(f"[toasty] handle_review error: {type(e).__name__}: {e}", file=sys.stderr)
         return create_error_response("Error processing review request", 500)
 
