@@ -44,7 +44,7 @@ Health check endpoint for monitoring service availability.
 {
   "status": "healthy",
   "service": "toasty-backend",
-  "timestamp": null
+  "timestamp": datetime.now().isoformat()
 }
 ```
 

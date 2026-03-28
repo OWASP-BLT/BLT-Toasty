@@ -8,7 +8,7 @@ IMPORTANT: The parse_path function is duplicated here because worker.py requires
 the Cloudflare Workers runtime (js module) and cannot be imported in standard Python.
 If you modify the parse_path logic in worker.py, you MUST update this copy to match.
 """
-
+from datetime import datetime
 
 def parse_path(url):
     """
@@ -96,9 +96,10 @@ def test_json_response_structure():
     health_response = {
         "status": "healthy",
         "service": "toasty-backend",
-        "timestamp": None
+        "timestamp": datetime.now().isoformat(),
     }
     assert health_response["status"] == "healthy"
+    assert isinstance(health_response["timestamp"], str)
     assert "service" in health_response
     
     # Test review response
@@ -112,7 +113,7 @@ def test_json_response_structure():
             "summary": "Review completed successfully"
         },
         "metadata": {
-            "processed_at": None,
+            "processed_at": datetime.now().isoformat(),
             "worker_version": "1.0.0"
         }
     }

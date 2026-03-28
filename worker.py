@@ -4,7 +4,7 @@ Cloudflare Worker for Toasty - AI Code Reviewer Backend
 This worker handles API requests for the Toasty AI code review service.
 It provides endpoints for code analysis, health checks, and status monitoring.
 """
-
+from datetime import datetime
 from js import Response, Headers
 import json
 
@@ -151,7 +151,7 @@ def handle_health(request):
     health_data = {
         "status": "healthy",
         "service": "toasty-backend",
-        "timestamp": None  # Would use datetime in production
+        "timestamp": datetime.now().isoformat()  # Would use datetime in production
     }
     
     return create_json_response(health_data, 200)
@@ -233,7 +233,7 @@ async def handle_review(request, env):
                 "summary": "Review completed successfully"
             },
             "metadata": {
-                "processed_at": None,  # Would use datetime in production
+                "processed_at": datetime.now().isoformat(),  # Would use datetime in production
                 "worker_version": "1.0.0"
             }
         }
