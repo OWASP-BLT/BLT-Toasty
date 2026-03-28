@@ -260,16 +260,14 @@ async def handle_review(request, env):
         })
 
         # Add timeout via AbortController to avoid hanging on slow Gemini responses
-        from js import AbortController
-        controller = AbortController.new()
-        # 30 second timeout
-        abort_signal = controller.signal
+        from js import AbortSignal
+        # AbortSignal.timeout() enforces a hard 30-second timeout on the fetch
         gemini_response = await js_fetch(
             gemini_url,
             method="POST",
             body=gemini_payload,
             headers=gemini_headers,
-            signal=abort_signal
+            signal=AbortSignal.timeout(30000)
         )
 
         if not gemini_response.ok:
