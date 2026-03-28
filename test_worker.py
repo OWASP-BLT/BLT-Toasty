@@ -254,6 +254,9 @@ def test_endpoint_documentation_includes_webhook():
     endpoint dict, kept intentionally local due to runtime import constraints.
     Must be manually updated if the real endpoints in worker.py change.
     """
+    # TODO: future improvement — extract endpoints to a shared JSON schema both files
+    # reference, or add a CI step that parses worker.py and compares endpoint dicts.
+    # Blocked by runtime import constraints (worker.py requires Cloudflare Workers runtime).
     # Hardcoded mirror of worker.py handle_root() endpoints — keep in sync
     endpoints_doc = {
         "/": "Service information",
