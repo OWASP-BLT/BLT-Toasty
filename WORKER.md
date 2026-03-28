@@ -44,7 +44,7 @@ Health check endpoint for monitoring service availability.
 {
   "status": "healthy",
   "service": "toasty-backend",
-  "timestamp": datetime.now().isoformat()
+  "timestamp": "2026-03-28T14:30:00Z",
 }
 ```
 
@@ -72,7 +72,7 @@ Submit code for AI-powered review and analysis.
     "summary": "Review completed successfully"
   },
   "metadata": {
-    "processed_at": null,
+    "processed_at": "2026-03-28T14:30:00Z",
     "worker_version": "1.0.0"
   }
 }

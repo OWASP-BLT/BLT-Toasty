@@ -8,8 +8,12 @@ IMPORTANT: The parse_path function is duplicated here because worker.py requires
 the Cloudflare Workers runtime (js module) and cannot be imported in standard Python.
 If you modify the parse_path logic in worker.py, you MUST update this copy to match.
 """
-from datetime import datetime
+from datetime import datetime,timezone
+import re
 
+ISO_8601_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
 def parse_path(url):
     """
     Extract clean path from URL, handling query params and fragments.
@@ -96,10 +100,12 @@ def test_json_response_structure():
     health_response = {
         "status": "healthy",
         "service": "toasty-backend",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     assert health_response["status"] == "healthy"
-    assert isinstance(health_response["timestamp"], str)
+    # Instead of isinstance(..., str), use this:
+    assert ISO_8601_RE.match(health_response["timestamp"])
+    assert ISO_8601_RE.match(review_response["metadata"]["processed_at"])
     assert "service" in health_response
     
     # Test review response
