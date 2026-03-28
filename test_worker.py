@@ -8,8 +8,12 @@ IMPORTANT: The parse_path function is duplicated here because worker.py requires
 the Cloudflare Workers runtime (js module) and cannot be imported in standard Python.
 If you modify the parse_path logic in worker.py, you MUST update this copy to match.
 """
+from datetime import datetime,timezone
+import re
 
-
+ISO_8601_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
 def parse_path(url):
     """
     Extract clean path from URL, handling query params and fragments.
@@ -73,10 +77,9 @@ def test_route_parsing():
     
     print("✓ All route parsing tests passed")
 
-
 def test_json_response_structure():
     """Test JSON response data structures."""
-    # Test root response
+    # 1. Test root response
     root_response = {
         "service": "Toasty AI Code Reviewer",
         "version": "1.0.0",
@@ -92,16 +95,18 @@ def test_json_response_structure():
     assert "endpoints" in root_response
     assert root_response["version"] == "1.0.0"
     
-    # Test health response
+    # 2. Test health response
     health_response = {
         "status": "healthy",
         "service": "toasty-backend",
-        "timestamp": None
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     assert health_response["status"] == "healthy"
     assert "service" in health_response
+    # Verify health timestamp format
+    assert ISO_8601_RE.match(health_response["timestamp"]), "Health timestamp format invalid"
     
-    # Test review response
+    # 3. Test review response
     review_response = {
         "status": "success",
         "analysis": {
@@ -112,13 +117,15 @@ def test_json_response_structure():
             "summary": "Review completed successfully"
         },
         "metadata": {
-            "processed_at": None,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
             "worker_version": "1.0.0"
         }
     }
     assert review_response["status"] == "success"
     assert "analysis" in review_response
     assert "metadata" in review_response
+    # Verify review timestamp format
+    assert ISO_8601_RE.match(review_response["metadata"]["processed_at"]), "Review processed_at format invalid"
     
     print("✓ All JSON response structure tests passed")
 
