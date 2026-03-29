@@ -14,7 +14,6 @@ import json
 MAX_BODY_SIZE = 1024 * 1024
 
 
-
 def parse_path(url):
     """
     Extract clean path from URL, handling query params and fragments.
@@ -27,21 +26,21 @@ def parse_path(url):
     """
     # Extract path from URL (handle query params and fragments)
     # Format: https://domain.com/path?query#fragment
-    url_without_protocol = url.split('://', 1)[1] if '://' in url else url
-    path_start = url_without_protocol.find('/')
+    url_without_protocol = url.split("://", 1)[1] if "://" in url else url
+    path_start = url_without_protocol.find("/")
 
     if path_start == -1:
-        path = '/'
+        path = "/"
     else:
         # Get everything after the domain
         path_with_query = url_without_protocol[path_start:]
         # Remove query parameters and fragments
-        path = path_with_query.split('?')[0].split('#')[0]
+        path = path_with_query.split("?")[0].split("#")[0]
         # Ensure path starts with /
-        if not path.startswith('/'):
-            path = '/' + path
+        if not path.startswith("/"):
+            path = "/" + path
         # Remove trailing slash for consistent matching (except root)
-        if len(path) > 1 and path.endswith('/'):
+        if len(path) > 1 and path.endswith("/"):
             path = path[:-1]
 
     return path
@@ -68,30 +67,30 @@ async def on_fetch(request, env):
         return create_error_response(f"Error parsing URL: {str(e)}", 500)
 
     # Handle CORS preflight requests
-    if method == 'OPTIONS':
+    if method == "OPTIONS":
         return handle_options(request)
 
     # Route requests based on path and method
-    if path == '/' or path == '':
-        if method in ('GET', 'HEAD'):
+    if path == "/" or path == "":
+        if method in ("GET", "HEAD"):
             return handle_root(request)
         else:
-            return create_method_not_allowed_response(path, ['GET', 'HEAD'])
-    elif path == '/health':
-        if method in ('GET', 'HEAD'):
+            return create_method_not_allowed_response(path, ["GET", "HEAD"])
+    elif path == "/health":
+        if method in ("GET", "HEAD"):
             return handle_health(request)
         else:
-            return create_method_not_allowed_response(path, ['GET', 'HEAD'])
-    elif path == '/api/review':
-        if method == 'POST':
+            return create_method_not_allowed_response(path, ["GET", "HEAD"])
+    elif path == "/api/review":
+        if method == "POST":
             return await handle_review(request, env)
         else:
-            return create_method_not_allowed_response(path, ['POST'])
-    elif path == '/api/status':
-        if method in ('GET', 'HEAD'):
+            return create_method_not_allowed_response(path, ["POST"])
+    elif path == "/api/status":
+        if method in ("GET", "HEAD"):
             return handle_status(request)
         else:
-            return create_method_not_allowed_response(path, ['GET', 'HEAD'])
+            return create_method_not_allowed_response(path, ["GET", "HEAD"])
     else:
         return create_error_response(f"Not Found: {path}", 404)
 
@@ -133,8 +132,8 @@ def handle_root(request):
             "/": "Service information",
             "/health": "Health check endpoint",
             "/api/review": "POST - Submit code for review",
-            "/api/status": "GET - Check service status"
-        }
+            "/api/status": "GET - Check service status",
+        },
     }
 
     return create_json_response(response_data, 200)
@@ -153,7 +152,7 @@ def handle_health(request):
     health_data = {
         "status": "healthy",
         "service": "toasty-backend",
-        "timestamp": None  # Would use datetime in production
+        "timestamp": None,  # Would use datetime in production
     }
 
     return create_json_response(health_data, 200)
@@ -177,9 +176,7 @@ async def handle_review(request, env):
         # Auth gate — WORKER_SECRET is mandatory, fail closed if not configured
         worker_secret = getattr(env, "WORKER_SECRET", None)
         if not worker_secret:
-            return create_error_response(
-                "Service misconfigured: authentication not set up", 503
-            )
+            return create_error_response("Service misconfigured: authentication not set up", 503)
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer ") or auth_header[7:] != worker_secret:
             return create_error_response("Unauthorized", 401)
@@ -190,20 +187,14 @@ async def handle_review(request, env):
             try:
                 content_length = int(content_length_header)
                 if content_length > MAX_BODY_SIZE:
-                    return create_error_response(
-                        f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes",
-                        413
-                    )
+                    return create_error_response(f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes", 413)
             except ValueError:
                 pass
 
         body = await request.text()
 
         if len(body.encode("utf-8")) > MAX_BODY_SIZE:
-            return create_error_response(
-                f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes",
-                413
-            )
+            return create_error_response(f"Request body too large. Maximum size is {MAX_BODY_SIZE} bytes", 413)
 
         if not body:
             return create_error_response("Request body is required", 400)
@@ -215,10 +206,7 @@ async def handle_review(request, env):
 
         # Shape check — must be a JSON object
         if not isinstance(data, dict):
-            return create_error_response(
-                "Request body must be a JSON object",
-                400
-            )
+            return create_error_response("Request body must be a JSON object", 400)
 
         code = data.get("code")
         language = data.get("language", "unknown")
@@ -242,28 +230,24 @@ async def handle_review(request, env):
             f"```{language}\n"
             f"{code}\n"
             f"```\n\n"
-            'Respond ONLY with a valid JSON object (no markdown fences) in exactly this shape: '
+            "Respond ONLY with a valid JSON object (no markdown fences) in exactly this shape: "
             '{"status": "ok", "analysis": {"summary": "brief summary", '
             '"security_issues": [], "quality_issues": [], "suggestions": []}, '
             f'"metadata": {{"language": {json.dumps(language)}, "model": "gemini-2.0-flash"}}}}'
         )
 
-        gemini_url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            "gemini-2.0-flash:generateContent"
-        )
+        gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/" "gemini-2.0-flash:generateContent"
 
         gemini_headers = Headers.new()
         gemini_headers.set("Content-Type", "application/json")
         gemini_headers.set("x-goog-api-key", gemini_api_key)
 
-        gemini_payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 2048
+        gemini_payload = json.dumps(
+            {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048},
             }
-        })
+        )
 
         # Wrap js_fetch separately to catch timeout and network errors
         try:
@@ -272,7 +256,7 @@ async def handle_review(request, env):
                 method="POST",
                 body=gemini_payload,
                 headers=gemini_headers,
-                signal=AbortSignal.timeout(30000)
+                signal=AbortSignal.timeout(30000),
             )
         except Exception as e:
             print(f"[toasty] Gemini fetch error: {type(e).__name__}: {e}", file=sys.stderr)
@@ -333,19 +317,19 @@ async def handle_review(request, env):
         if not isinstance(status, str):
             status = "ok"
 
-        return create_json_response({
-            "status": status,
-            "analysis": {
-                "summary": summary,
-                "security_issues": security_issues,
-                "quality_issues": quality_issues,
-                "suggestions": suggestions
+        return create_json_response(
+            {
+                "status": status,
+                "analysis": {
+                    "summary": summary,
+                    "security_issues": security_issues,
+                    "quality_issues": quality_issues,
+                    "suggestions": suggestions,
+                },
+                "metadata": {"language": meta_language, "model": meta_model},
             },
-            "metadata": {
-                "language": meta_language,
-                "model": meta_model
-            }
-        }, 200)
+            200,
+        )
 
     except Exception as e:
         print(f"[toasty] handle_review error: {type(e).__name__}: {e}", file=sys.stderr)
@@ -366,12 +350,8 @@ def handle_status(request):
         "service": "toasty-backend",
         "status": "operational",
         "version": "1.0.0",
-        "features": {
-            "code_review": "available",
-            "health_check": "available",
-            "status_monitoring": "available"
-        },
-        "uptime": "available"
+        "features": {"code_review": "available", "health_check": "available", "status_monitoring": "available"},
+        "uptime": "available",
     }
 
     return create_json_response(status_data, 200)
@@ -394,11 +374,7 @@ def create_json_response(data, status_code=200):
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
     headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-    return Response.new(
-        json.dumps(data),
-        status=status_code,
-        headers=headers
-    )
+    return Response.new(json.dumps(data), status=status_code, headers=headers)
 
 
 def create_error_response(message, status_code=500):
@@ -412,10 +388,7 @@ def create_error_response(message, status_code=500):
     Returns:
         Response: Error response object
     """
-    error_data = {
-        "error": message,
-        "status": status_code
-    }
+    error_data = {"error": message, "status": status_code}
 
     return create_json_response(error_data, status_code)
 
@@ -440,14 +413,6 @@ def create_method_not_allowed_response(path, allowed_methods):
     headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
     headers.set("Allow", ", ".join(allowed_methods))
 
-    error_data = {
-        "error": "Method Not Allowed",
-        "message": message,
-        "status": 405
-    }
+    error_data = {"error": "Method Not Allowed", "message": message, "status": 405}
 
-    return Response.new(
-        json.dumps(error_data),
-        status=405,
-        headers=headers
-    )
+    return Response.new(json.dumps(error_data), status=405, headers=headers)
