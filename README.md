@@ -1,94 +1,3 @@
-<<<<<<< copilot/create-backend-cloudflare-workers
-# Toasty
-
-The smart, context-aware AI code reviewer from OWASP BLT.
-
-## Overview
-
-Toasty is an AI-powered code review service designed to help developers improve code quality through automated analysis and intelligent suggestions. It consists of a Django application for the main service and a Cloudflare Worker for serverless, globally distributed API endpoints.
-
-## Project Structure
-
-- **Django Application** (`/aibot`, `/toasty`) - Main Django-based application
-- **Cloudflare Worker** (root directory) - Serverless Python backend using Cloudflare Workers
-  - `worker.py` - Main worker handler
-  - `wrangler.toml` - Cloudflare Workers configuration
-  - `test_worker.py` - Worker tests
-
-## Components
-
-### Django Application
-
-The main Django application provides the core functionality for Toasty.
-
-**Setup:**
-```bash
-# Install dependencies
-poetry install
-
-# Run migrations
-python manage.py migrate
-
-# Start the development server
-python manage.py runserver
-```
-
-### Cloudflare Worker Backend
-
-A serverless backend built with Cloudflare Workers and Python for globally distributed, low-latency API endpoints.
-
-**Features:**
-- Health monitoring endpoints
-- Code review API
-- Status monitoring
-- CORS support with preflight handling
-- Comprehensive error handling and validation
-
-**Quick Start:**
-```bash
-# Install Node dependencies (including Wrangler CLI)
-npm install
-
-# Run locally
-npm run dev
-
-# Deploy
-npm run deploy
-```
-
-## Development
-
-### Prerequisites
-
-- Python >=3.13,<4.0.0
-- Poetry (for Django app)
-- Node.js and npm (for Cloudflare Worker)
-
-### Installation
-
-1. Clone the repository
-2. Install Django dependencies: `poetry install`
-3. Install Worker dependencies: `npm install`
-
-## API Endpoints
-
-The Cloudflare Worker provides these REST endpoints:
-
-- `GET /` - Service information
-- `GET /health` - Health check
-- `POST /api/review` - Submit code for review
-- `GET /api/status` - Service status
-
-See `worker.py` for detailed API documentation.
-
-## License
-
-This project is part of OWASP BLT.
-
-## Contributing
-
-Contributions are welcome! Please ensure all changes are tested before submitting.
-=======
 # Toasty - AI-Powered GitHub PR Assistant
 
 # 1. Architecture Overview (Cloudflare Native)
@@ -121,7 +30,7 @@ Contributions are welcome! Please ensure all changes are tested before submittin
 
 ## 2. Cloudflare Python Worker (Core Engine)
 
-Replaces Django backend.
+Cloudflare Python Worker — no Django dependency.
 
 Responsibilities:
 
@@ -473,4 +382,67 @@ That:
 * Scales globally at the edge
 * Minimizes latency and infrastructure overhead
 
->>>>>>> main
+
+
+---
+
+---
+
+# Getting Started
+
+This section covers the current working state of the Worker (`worker.py`).
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) (for Wrangler)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
+
+```bash
+npm install -g wrangler
+wrangler login
+```
+
+## Configure Secrets
+
+Set required secrets via Wrangler before deploying or running locally:
+
+```bash
+wrangler secret put GEMINI_API_KEY
+wrangler secret put WORKER_SECRET
+```
+
+- **GEMINI_API_KEY** — your Google Gemini API key
+- **WORKER_SECRET** — a secret token; all requests to `/api/review` must include `Authorization: Bearer <WORKER_SECRET>`
+
+## Run Locally
+
+```bash
+wrangler dev
+```
+
+Worker will be available at `http://localhost:8787`.
+
+## Test the `/api/review` Endpoint
+
+```bash
+curl -X POST http://localhost:8787/api/review \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <your_WORKER_SECRET>" \\
+  -d '{
+    "code": "def add(a, b): return a + b",
+    "language": "python",
+    "context": "Simple addition function"
+  }'
+```
+
+## Deploy to Cloudflare
+
+```bash
+wrangler deploy
+```
+
+## Health Check
+
+```bash
+curl http://localhost:8787/health
+```
