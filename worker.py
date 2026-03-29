@@ -88,7 +88,7 @@ async def on_fetch(request, env):
             return create_method_not_allowed_response(path, ["POST"])
     elif path == "/api/status":
         if method in ("GET", "HEAD"):
-            return handle_status(request)
+            return handle_status(request, env)
         else:
             return create_method_not_allowed_response(path, ["GET", "HEAD"])
     else:
@@ -336,7 +336,7 @@ async def handle_review(request, env):
         return create_error_response("Error processing review request", 500)
 
 
-def handle_status(request):
+def handle_status(request, env):
     """
     Handle status check endpoint.
 
@@ -346,11 +346,18 @@ def handle_status(request):
     Returns:
         Response: Service status information
     """
+    review_ready = bool(
+        getattr(env, "WORKER_SECRET", None) and getattr(env, "GEMINI_API_KEY", None)
+    )
     status_data = {
         "service": "toasty-backend",
-        "status": "operational",
+        "status": "operational" if review_ready else "degraded",
         "version": "1.0.0",
-        "features": {"code_review": "available", "health_check": "available", "status_monitoring": "available"},
+        "features": {
+            "code_review": "available" if review_ready else "unavailable",
+            "health_check": "available",
+            "status_monitoring": "available",
+        },
         "uptime": "available",
     }
 
