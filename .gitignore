@@ -106,6 +106,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# GitHub App private keys
+*.pem
+
 # mkdocs documentation
 /site
 
