@@ -212,7 +212,7 @@ api_key = env.API_KEY
 
 ## Future Enhancements
 
-- [ ] Integration with Google GenAI for advanced code analysis
+- [x] Integration with Cloudflare Workers AI for code analysis
 - [ ] Integration with Bandit for Python security scanning
 - [ ] Persistent storage using Cloudflare KV or R2
 - [ ] Rate limiting and authentication

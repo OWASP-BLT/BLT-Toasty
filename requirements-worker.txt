@@ -5,8 +5,7 @@
 # Core dependencies (if needed beyond built-in libraries)
 # Most standard library modules are available in Cloudflare Workers Python runtime
 
-# For future integration with AI services
-# google-genai>=1.52.0
+# Cloudflare Workers AI is available via the native AI binding in wrangler.toml
 # langchain>=1.0.8
 
 # For security scanning integration

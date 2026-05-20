@@ -18,6 +18,10 @@ zone_id = ""
 [build]
 command = ""
 
+# Cloudflare Workers AI binding
+[ai]
+binding = "AI"
+
 # Environment variables
 [env.production]
 name = "toasty-backend-prod"
