@@ -79,7 +79,7 @@ cp .env.example .env
 | `POSTGRES_USER`     | PostgreSQL username                              | Yes      |
 | `POSTGRES_DB`       | PostgreSQL database name                         | Yes      |
 | `POSTGRES_PASSWORD` | PostgreSQL password                              | Yes      |
-| `GEMINI_API_KEY`    | Google Gemini API key (optional — not yet wired into the app, reserved for future AI features) | No       |
+| `CLOUDFLARE_AI_MODEL` | Cloudflare Workers AI model ID (optional override for worker AI review) | No       |
 
 > **Never commit your `.env` file.** It is already listed in `.gitignore`.
 

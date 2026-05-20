@@ -108,17 +108,25 @@ def test_json_response_structure():
             "language": "python",
             "lines_of_code": 5,
             "issues": [],
-            "suggestions": [],
+            "suggestions": [
+                {
+                    "type": "info",
+                    "message": "Example Cloudflare AI review output",
+                    "line": 0
+                }
+            ],
             "summary": "Review completed successfully"
         },
         "metadata": {
             "processed_at": datetime.now(timezone.utc).isoformat(),
-            "worker_version": "1.0.0"
+            "worker_version": "1.0.0",
+            "ai_provider": "cloudflare_workers_ai"
         }
     }
     assert review_response["status"] == "success"
     assert "analysis" in review_response
     assert "metadata" in review_response
+    assert review_response["metadata"]["ai_provider"] in ("cloudflare_workers_ai", "fallback")
     
     print("✓ All JSON response structure tests passed")
 

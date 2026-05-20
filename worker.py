@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 # Maximum request body size in bytes (1MB)
 MAX_BODY_SIZE = 1024 * 1024
+DEFAULT_CLOUDFLARE_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+MAX_AI_REVIEW_LENGTH = 6000
 
 
 
@@ -215,27 +217,47 @@ async def handle_review(request, env):
         
         language = data.get('language', 'unknown')
         context = data.get('context', '')
+
+        ai_review, ai_error = await generate_cloudflare_ai_review(code, language, context, env)
+
+        suggestions = []
+        summary = "Review completed successfully"
+        ai_provider = "cloudflare_workers_ai" if ai_review else "fallback"
+
+        if ai_review:
+            suggestions.append(
+                {
+                    "type": "info",
+                    "message": ai_review,
+                    "line": 0
+                }
+            )
+        else:
+            summary = "Review completed without Cloudflare AI response"
+            fallback_message = "Cloudflare AI review unavailable"
+            if ai_error:
+                fallback_message = f"{fallback_message}: {ai_error}"
+            suggestions.append(
+                {
+                    "type": "warning",
+                    "message": fallback_message,
+                    "line": 0
+                }
+            )
         
-        # Placeholder for actual AI review logic
-        # In production, this would call AI services, perform static analysis, etc.
         review_result = {
             "status": "success",
             "analysis": {
                 "language": language,
                 "lines_of_code": len(code.split('\n')),
                 "issues": [],
-                "suggestions": [
-                    {
-                        "type": "info",
-                        "message": "Code review placeholder - integration with AI services pending",
-                        "line": 0
-                    }
-                ],
-                "summary": "Review completed successfully"
+                "suggestions": suggestions,
+                "summary": summary
             },
             "metadata": {
                 "processed_at": datetime.now(timezone.utc).isoformat(),
-                "worker_version": "1.0.0"
+                "worker_version": "1.0.0",
+                "ai_provider": ai_provider
             }
         }
         
@@ -262,7 +284,8 @@ def handle_status(request):
         "features": {
             "code_review": "available",
             "health_check": "available",
-            "status_monitoring": "available"
+            "status_monitoring": "available",
+            "cloudflare_ai_review": "available"
         },
         "uptime": "available"
     }
@@ -345,3 +368,70 @@ def create_method_not_allowed_response(path, allowed_methods):
         headers=headers
     )
 
+
+def extract_cloudflare_ai_text(ai_result):
+    """
+    Extract text output from Cloudflare AI response payloads.
+    """
+    if isinstance(ai_result, str):
+        return ai_result
+
+    if not isinstance(ai_result, dict):
+        return ""
+
+    for key in ("response", "result", "output", "text"):
+        value = ai_result.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+        if isinstance(value, list):
+            text_parts = []
+            for item in value:
+                if isinstance(item, dict):
+                    item_text = item.get("text")
+                    if isinstance(item_text, str):
+                        text_parts.append(item_text)
+                elif isinstance(item, str):
+                    text_parts.append(item)
+            merged = "\n".join(part for part in text_parts if part).strip()
+            if merged:
+                return merged
+
+    return ""
+
+
+async def generate_cloudflare_ai_review(code, language, context, env):
+    """
+    Generate review text using Cloudflare Workers AI binding.
+    """
+    ai_binding = getattr(env, "AI", None)
+    if ai_binding is None:
+        return None, "AI binding is not configured"
+
+    prompt = (
+        "You are an expert code reviewer. Provide concise review feedback.\n"
+        f"Language: {language}\n"
+        f"Context: {context or 'No additional context provided'}\n\n"
+        "Code:\n"
+        f"{code}\n\n"
+        "Return a short markdown review with: strengths, issues, and improvement suggestions."
+    )
+
+    try:
+        ai_result = await ai_binding.run(
+            DEFAULT_CLOUDFLARE_AI_MODEL,
+            {
+                "prompt": prompt,
+                "max_tokens": 700
+            }
+        )
+    except Exception:
+        return None, "request failed"
+
+    ai_text = extract_cloudflare_ai_text(ai_result).strip()
+    if not ai_text:
+        return None, "empty response"
+
+    if len(ai_text) > MAX_AI_REVIEW_LENGTH:
+        ai_text = ai_text[:MAX_AI_REVIEW_LENGTH].rstrip() + "..."
+
+    return ai_text, None
